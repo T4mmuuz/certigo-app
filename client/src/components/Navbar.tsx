@@ -34,7 +34,7 @@ export function Navbar() {
           <div className="bg-primary text-primary-foreground p-1.5 rounded-lg">
             <MapPin className="w-5 h-5" />
           </div>
-          <span className="hidden sm:inline">ServiMap</span>
+          <span className="hidden sm:inline">CertiGo</span>
         </Link>
 
         {/* Search Bar - Hidden on very small screens if needed, or collapsed */}

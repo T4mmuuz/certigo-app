@@ -56,11 +56,11 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-secondary/30 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-red-50 to-pink-50 flex items-center justify-center p-4">
       {/* Decorative Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-3xl" />
-         <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-accent/10 rounded-full blur-3xl" />
+         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-red-200/10 rounded-full blur-3xl" />
+         <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-red-200/15 rounded-full blur-3xl" />
       </div>
 
       <div className="w-full max-w-md animate-fade-in">
@@ -68,7 +68,7 @@ export default function AuthPage() {
           <div className="inline-flex items-center justify-center w-12 h-12 bg-primary text-primary-foreground rounded-xl shadow-lg shadow-primary/30 mb-4">
             <MapPin className="w-6 h-6" />
           </div>
-          <h1 className="text-3xl font-display font-bold text-foreground">ServiMap</h1>
+          <h1 className="text-3xl font-display font-bold text-foreground">CertiGo</h1>
           <p className="text-muted-foreground mt-2">Find trusted local experts in minutes.</p>
         </div>
 
@@ -92,7 +92,7 @@ export default function AuthPage() {
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
                       required
-                      className="bg-white"
+                      className="bg-white border-2 border-red-300 focus:border-red-500 focus:ring-red-200"
                     />
                   </div>
                   <div className="space-y-2">
@@ -104,7 +104,7 @@ export default function AuthPage() {
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       required
-                      className="bg-white"
+                      className="bg-white border-2 border-red-300 focus:border-red-500 focus:ring-red-200"
                     />
                   </div>
                   <Button type="submit" className="w-full mt-2" disabled={isLoggingIn}>
@@ -124,7 +124,7 @@ export default function AuthPage() {
                         value={regUsername}
                         onChange={(e) => setRegUsername(e.target.value)}
                         required
-                        className="bg-white"
+                        className="bg-white border-2 border-red-300 focus:border-red-500 focus:ring-red-200"
                       />
                     </div>
                     <div className="space-y-2">
@@ -135,7 +135,7 @@ export default function AuthPage() {
                         value={regName}
                         onChange={(e) => setRegName(e.target.value)}
                         required
-                        className="bg-white"
+                        className="bg-white border-2 border-red-300 focus:border-red-500 focus:ring-red-200"
                       />
                     </div>
                   </div>
@@ -148,7 +148,7 @@ export default function AuthPage() {
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
                       required
-                      className="bg-white"
+                      className="bg-white border-2 border-red-300 focus:border-red-500 focus:ring-red-200"
                     />
                   </div>
 
@@ -191,7 +191,7 @@ export default function AuthPage() {
                         placeholder="Tell clients about your experience..."
                         value={regBio}
                         onChange={(e) => setRegBio(e.target.value)}
-                        className="bg-white"
+                        className="bg-white border-2 border-red-300 focus:border-red-500 focus:ring-red-200"
                       />
                     </div>
                   )}
