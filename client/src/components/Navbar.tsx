@@ -10,8 +10,9 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Search, MapPin, User, LogOut, Briefcase, Calendar } from "lucide-react";
+import { Search, User, LogOut, Briefcase, Calendar } from "lucide-react";
 import { useState } from "react";
+import logoImage from "@assets/generated_images/certigo_professional_marketplace_logo.png";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -31,9 +32,7 @@ export function Navbar() {
       <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 font-display text-2xl font-bold text-primary hover:opacity-90 transition-opacity">
-          <div className="bg-primary text-primary-foreground p-1.5 rounded-lg">
-            <MapPin className="w-5 h-5" />
-          </div>
+          <img src={logoImage} alt="CertiGo Logo" className="w-10 h-10 rounded-lg" />
           <span className="hidden sm:inline">CertiGo</span>
         </Link>
 

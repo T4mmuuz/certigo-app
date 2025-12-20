@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { MapPin, ArrowRight, Loader2, CheckCircle } from "lucide-react";
+import { ArrowRight, Loader2, CheckCircle } from "lucide-react";
+import logoImage from "@assets/generated_images/certigo_professional_marketplace_logo.png";
 
 export default function AuthPage() {
   const { login, register, isLoggingIn, isRegistering } = useAuth();
@@ -65,9 +66,7 @@ export default function AuthPage() {
 
       <div className="w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-primary text-primary-foreground rounded-xl shadow-lg shadow-primary/30 mb-4">
-            <MapPin className="w-6 h-6" />
-          </div>
+          <img src={logoImage} alt="CertiGo Logo" className="w-16 h-16 rounded-xl shadow-lg shadow-primary/30 mx-auto mb-4" />
           <h1 className="text-3xl font-display font-bold text-foreground">CertiGo</h1>
           <p className="text-muted-foreground mt-2">Find trusted local experts in minutes.</p>
         </div>
