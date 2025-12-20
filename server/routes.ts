@@ -127,6 +127,31 @@ export async function registerRoutes(
         date: new Date(req.body.date) // Ensure date is Date object
       });
       const booking = await storage.createBooking(input);
+      
+      // Get service and customer info for notification
+      const service = await storage.getService(booking.serviceId);
+      const customer = await storage.getUser(booking.customerId);
+      
+      if (service && customer) {
+        // Notify provider of new booking
+        await storage.createNotification({
+          userId: service.providerId,
+          type: "booking_new",
+          title: "New Booking Request!",
+          body: `${customer.name} wants to book ${service.title} on ${new Date(booking.date).toLocaleDateString()}`,
+          metadata: JSON.stringify({ bookingId: booking.id, serviceId: service.id }),
+        });
+        
+        // Confirm to customer
+        await storage.createNotification({
+          userId: booking.customerId,
+          type: "booking_confirmed",
+          title: "Booking Confirmed",
+          body: `Your booking for ${service.title} has been submitted. The provider will contact you soon.`,
+          metadata: JSON.stringify({ bookingId: booking.id, serviceId: service.id }),
+        });
+      }
+      
       res.status(201).json(booking);
     } catch (err) {
        if (err instanceof z.ZodError) res.status(400).json(err);
@@ -150,6 +175,20 @@ export async function registerRoutes(
     try {
       const input = api.reviews.create.input.parse(req.body);
       const review = await storage.createReview(input);
+      
+      // Notify provider of new review
+      const service = await storage.getService(input.serviceId);
+      const customer = await storage.getUser(input.customerId);
+      if (service && customer) {
+        await storage.createNotification({
+          userId: service.providerId,
+          type: "review_received",
+          title: "New Review Received!",
+          body: `${customer.name} left a ${input.rating}-star review for ${service.title}`,
+          metadata: JSON.stringify({ reviewId: review.id, serviceId: service.id }),
+        });
+      }
+      
       res.status(201).json(review);
     } catch (err) {
       if (err instanceof z.ZodError) res.status(400).json(err);
@@ -586,6 +625,99 @@ export async function registerRoutes(
       isPremium: user.isPremium,
       premiumExpiresAt: user.premiumExpiresAt,
     });
+  });
+
+  // === NOTIFICATIONS ===
+  
+  // Get user notifications
+  app.get("/api/notifications", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const notifications = await storage.getNotifications(userId);
+      const unreadCount = await storage.getUnreadNotificationCount(userId);
+      res.json({ notifications, unreadCount });
+    } catch (err) {
+      console.error('Notifications error:', err);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  // Mark notification as read
+  app.post("/api/notifications/:id/read", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const notification = await storage.markNotificationRead(Number(req.params.id));
+      res.json(notification);
+    } catch (err) {
+      console.error('Mark notification read error:', err);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  // Mark all notifications as read
+  app.post("/api/notifications/read-all", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      await storage.markAllNotificationsRead(userId);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Mark all notifications read error:', err);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // Update user location
+  app.post("/api/user/location", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const { lat, lng } = req.body;
+      if (typeof lat !== 'number' || typeof lng !== 'number') {
+        return res.status(400).json({ message: "Invalid location" });
+      }
+      const updated = await storage.updateUserLocation((req.user as any).id, lat, lng);
+      res.json({ success: true, lat: updated.lat, lng: updated.lng });
+    } catch (err) {
+      console.error('Update location error:', err);
+      res.status(500).json({ message: "Failed to update location" });
+    }
+  });
+
+  // Provider signals arrival at customer location
+  app.post("/api/bookings/:id/arrived", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) {
+        return res.status(403).json({ message: "Only the provider can mark arrival" });
+      }
+      
+      // Notify customer that provider has arrived
+      await storage.createNotification({
+        userId: booking.customerId,
+        type: "provider_arrived",
+        title: "Your provider has arrived!",
+        body: `${service.provider.name} is at your location for ${service.title}`,
+        metadata: JSON.stringify({ bookingId, serviceId: service.id }),
+      });
+      
+      res.json({ success: true, message: "Customer has been notified of your arrival" });
+    } catch (err) {
+      console.error('Provider arrival error:', err);
+      res.status(500).json({ message: "Failed to notify arrival" });
+    }
   });
 
   // Seed Data

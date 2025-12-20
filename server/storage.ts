@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, services, bookings, reviews, transactions, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction } from "@shared/schema";
-import { eq, ilike, or, sql, desc } from "drizzle-orm";
+import { users, services, bookings, reviews, transactions, notifications, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification } from "@shared/schema";
+import { eq, ilike, or, sql, desc, isNull, and } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -39,6 +39,16 @@ export interface IStorage {
   
   // Premium
   updateUserPremium(userId: number, isPremium: boolean, premiumExpiresAt: Date | null, stripeSubscriptionId: string | null): Promise<User>;
+  
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotifications(userId: number): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: number): Promise<number>;
+  markNotificationRead(id: number): Promise<Notification>;
+  markAllNotificationsRead(userId: number): Promise<void>;
+  
+  // Location
+  updateUserLocation(userId: number, lat: number, lng: number): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -239,6 +249,47 @@ export class DatabaseStorage implements IStorage {
       premiumExpiresAt,
       stripeSubscriptionId,
     }).where(eq(users.id, userId)).returning();
+    return updated;
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [created] = await db.insert(notifications).values(notification).returning();
+    return created;
+  }
+
+  async getNotifications(userId: number): Promise<Notification[]> {
+    return await db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+  }
+
+  async getUnreadNotificationCount(userId: number): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+    return Number(result[0]?.count || 0);
+  }
+
+  async markNotificationRead(id: number): Promise<Notification> {
+    const [updated] = await db.update(notifications)
+      .set({ readAt: new Date() })
+      .where(eq(notifications.id, id))
+      .returning();
+    return updated;
+  }
+
+  async markAllNotificationsRead(userId: number): Promise<void> {
+    await db.update(notifications)
+      .set({ readAt: new Date() })
+      .where(eq(notifications.userId, userId));
+  }
+
+  async updateUserLocation(userId: number, lat: number, lng: number): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ lat, lng })
+      .where(eq(users.id, userId))
+      .returning();
     return updated;
   }
 }
