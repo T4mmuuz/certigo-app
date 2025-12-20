@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, services, bookings, reviews, transactions, notifications, conversations, messages, servicePackages, referrals, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage, type ServicePackage, type InsertServicePackage, type Referral, type InsertReferral } from "@shared/schema";
+import { users, services, bookings, reviews, transactions, notifications, conversations, messages, servicePackages, referrals, payouts, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage, type ServicePackage, type InsertServicePackage, type Referral, type InsertReferral, type Payout, type InsertPayout } from "@shared/schema";
 import { eq, ilike, or, sql, desc, isNull, and } from "drizzle-orm";
 
 export interface IStorage {
@@ -76,6 +76,14 @@ export interface IStorage {
   getServicePackage(id: number): Promise<ServicePackage | undefined>;
   updateServicePackage(id: number, data: Partial<InsertServicePackage>): Promise<ServicePackage>;
   deleteServicePackage(id: number): Promise<void>;
+  
+  // Payout methods
+  addToReferralBalance(userId: number, amount: number): Promise<User>;
+  deductFromReferralBalance(userId: number, amount: number): Promise<User | null>;
+  updateStripeConnectAccount(userId: number, accountId: string): Promise<User>;
+  createPayout(payout: InsertPayout): Promise<Payout>;
+  getUserPayouts(userId: number): Promise<Payout[]>;
+  updatePayoutStatus(id: number, status: string, transferId?: string, failureReason?: string): Promise<Payout>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -472,6 +480,52 @@ export class DatabaseStorage implements IStorage {
 
   async deleteServicePackage(id: number): Promise<void> {
     await db.update(servicePackages).set({ isActive: false }).where(eq(servicePackages.id, id));
+  }
+
+  // Payout methods
+  async addToReferralBalance(userId: number, amount: number): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ referralBalance: sql`${users.referralBalance} + ${amount}` })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async deductFromReferralBalance(userId: number, amount: number): Promise<User | null> {
+    // Atomic deduction with balance check to prevent race conditions and negative balance
+    const [updated] = await db.update(users)
+      .set({ referralBalance: sql`${users.referralBalance} - ${amount}` })
+      .where(and(eq(users.id, userId), sql`${users.referralBalance} >= ${amount}`))
+      .returning();
+    return updated || null; // Returns null if balance was insufficient
+  }
+
+  async updateStripeConnectAccount(userId: number, accountId: string): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ stripeConnectAccountId: accountId })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async createPayout(payout: InsertPayout): Promise<Payout> {
+    const [created] = await db.insert(payouts).values(payout).returning();
+    return created;
+  }
+
+  async getUserPayouts(userId: number): Promise<Payout[]> {
+    return db.select().from(payouts)
+      .where(eq(payouts.userId, userId))
+      .orderBy(desc(payouts.createdAt));
+  }
+
+  async updatePayoutStatus(id: number, status: string, transferId?: string, failureReason?: string): Promise<Payout> {
+    const updates: any = { status };
+    if (transferId) updates.stripeTransferId = transferId;
+    if (failureReason) updates.failureReason = failureReason;
+    if (status === 'completed') updates.completedAt = new Date();
+    const [updated] = await db.update(payouts).set(updates).where(eq(payouts.id, id)).returning();
+    return updated;
   }
 }
 

@@ -765,7 +765,7 @@ export async function registerRoutes(
       const customer = await storage.getUser(booking.customerId);
       if (customer && customer.referredBy) {
         // Check if customer has a pending referral
-        const referrer = await storage.getUserByReferralCode(customer.referredBy);
+        const referrer = await storage.getUser(customer.referredBy);
         if (referrer) {
           const referrals = await storage.getReferralsByReferrer(referrer.id);
           const pendingReferral = referrals.find(
@@ -775,6 +775,9 @@ export async function registerRoutes(
           if (pendingReferral) {
             // Mark referral as completed and award bonus
             await storage.updateReferralStatus(pendingReferral.id, "rewarded");
+            
+            // Add reward to referrer's balance
+            await storage.addToReferralBalance(referrer.id, pendingReferral.rewardAmount);
             
             // Notify referrer of reward
             await storage.createNotification({
@@ -1101,6 +1104,174 @@ export async function registerRoutes(
     } catch (err) {
       console.error('Send message error:', err);
       res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Stripe Connect - Create onboarding link for payouts
+  app.post("/api/connect/onboard", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
+      let accountId = user.stripeConnectAccountId;
+      
+      // Create a new connected account if user doesn't have one
+      if (!accountId) {
+        const account = await stripe.accounts.create({
+          type: 'express',
+          country: 'US',
+          email: user.username + '@certigo.app', // Using username as placeholder
+          capabilities: {
+            transfers: { requested: true },
+          },
+        });
+        accountId = account.id;
+        await storage.updateStripeConnectAccount(userId, accountId);
+      }
+      
+      // Create an account link for onboarding
+      const accountLink = await stripe.accountLinks.create({
+        account: accountId,
+        refresh_url: `${baseUrl}/profile?connect=refresh`,
+        return_url: `${baseUrl}/profile?connect=success`,
+        type: 'account_onboarding',
+      });
+      
+      res.json({ url: accountLink.url });
+    } catch (err) {
+      console.error('Connect onboard error:', err);
+      res.status(500).json({ message: "Failed to create onboarding link" });
+    }
+  });
+
+  // Stripe Connect - Get connect account status
+  app.get("/api/connect/status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      
+      if (!user.stripeConnectAccountId) {
+        return res.json({ 
+          connected: false,
+          balance: user.referralBalance,
+          payoutsEnabled: false,
+        });
+      }
+      
+      const stripe = await getUncachableStripeClient();
+      const account = await stripe.accounts.retrieve(user.stripeConnectAccountId);
+      
+      res.json({
+        connected: true,
+        balance: user.referralBalance,
+        payoutsEnabled: account.payouts_enabled || false,
+        chargesEnabled: account.charges_enabled || false,
+        detailsSubmitted: account.details_submitted || false,
+      });
+    } catch (err) {
+      console.error('Connect status error:', err);
+      res.status(500).json({ message: "Failed to get connect status" });
+    }
+  });
+
+  // Request payout
+  app.post("/api/payouts/request", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      
+      if (!user.stripeConnectAccountId) {
+        return res.status(400).json({ message: "Please connect your bank account first" });
+      }
+      
+      if (user.referralBalance < 500) { // Minimum $5 payout
+        return res.status(400).json({ message: "Minimum payout amount is $5" });
+      }
+      
+      const stripe = await getUncachableStripeClient();
+      
+      // Check if payouts are enabled
+      const account = await stripe.accounts.retrieve(user.stripeConnectAccountId);
+      if (!account.payouts_enabled) {
+        return res.status(400).json({ message: "Your payout account setup is incomplete. Please complete the onboarding process." });
+      }
+      
+      const amount = user.referralBalance;
+      
+      // Atomically deduct from balance first - prevents race conditions
+      const updatedUser = await storage.deductFromReferralBalance(userId, amount);
+      if (!updatedUser) {
+        return res.status(400).json({ message: "Insufficient balance or concurrent payout in progress" });
+      }
+      
+      // Create payout record after successful deduction
+      const payout = await storage.createPayout({
+        userId,
+        amount,
+        status: 'processing',
+      });
+      
+      try {
+        // Transfer to connected account
+        const transfer = await stripe.transfers.create({
+          amount,
+          currency: 'usd',
+          destination: user.stripeConnectAccountId,
+          description: `CertiGo referral rewards payout`,
+        });
+        
+        const completedPayout = await storage.updatePayoutStatus(payout.id, 'completed', transfer.id);
+        
+        // Notify user
+        await storage.createNotification({
+          userId,
+          type: "payout_completed",
+          title: "Payout Sent!",
+          body: `Your payout of $${(amount / 100).toFixed(2)} has been sent to your bank account.`,
+          metadata: JSON.stringify({ payoutId: payout.id, amount }),
+        });
+        
+        res.json({ 
+          success: true, 
+          message: `Payout of $${(amount / 100).toFixed(2)} initiated successfully`,
+          payout: completedPayout,
+        });
+      } catch (transferErr: any) {
+        // If transfer fails, refund the balance and mark payout as failed
+        await storage.addToReferralBalance(userId, amount);
+        await storage.updatePayoutStatus(payout.id, 'failed', undefined, transferErr.message);
+        
+        throw transferErr;
+      }
+    } catch (err: any) {
+      console.error('Payout request error:', err);
+      res.status(500).json({ message: err.message || "Failed to process payout" });
+    }
+  });
+
+  // Get payout history
+  app.get("/api/payouts", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const payouts = await storage.getUserPayouts(userId);
+      res.json(payouts);
+    } catch (err) {
+      console.error('Get payouts error:', err);
+      res.status(500).json({ message: "Failed to get payouts" });
     }
   });
 

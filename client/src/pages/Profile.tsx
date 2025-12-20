@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Settings, Camera, Gift, Copy, Check } from "lucide-react";
+import { Plus, Settings, Camera, Gift, Copy, Check, Wallet, ExternalLink, Loader2 } from "lucide-react";
 import { useState, useRef } from "react";
 import { Redirect } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -45,6 +45,45 @@ export default function Profile() {
     mutationFn: () => apiRequest("POST", "/api/users/generate-referral-code"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+
+  const { data: connectStatus, refetch: refetchConnectStatus } = useQuery<{
+    connected: boolean;
+    balance: number;
+    payoutsEnabled: boolean;
+    chargesEnabled?: boolean;
+    detailsSubmitted?: boolean;
+  }>({
+    queryKey: ["/api/connect/status"],
+    enabled: !!user,
+  });
+
+  const connectOnboard = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/connect/onboard");
+      return res.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.location.href = data.url;
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to start setup", variant: "destructive" });
+    },
+  });
+
+  const requestPayout = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/payouts/request");
+      return res.json();
+    },
+    onSuccess: (data: { message: string }) => {
+      toast({ title: "Payout Requested", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/connect/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users/referral-stats"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Payout Failed", description: err.message || "Failed to request payout", variant: "destructive" });
     },
   });
 
@@ -234,6 +273,87 @@ export default function Profile() {
                   >
                     {generateReferralCode.isPending ? "Generating..." : "Get My Referral Code"}
                   </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Wallet className="w-4 h-4" /> Payout Settings
+                </CardTitle>
+                <CardDescription>Withdraw your referral earnings</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {connectStatus && (
+                  <>
+                    <div className="p-3 bg-muted rounded-md text-center">
+                      <p className="text-2xl font-bold text-green-600" data-testid="text-available-balance">
+                        ${((connectStatus.balance || 0) / 100).toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Available Balance</p>
+                    </div>
+                    
+                    {!connectStatus.connected ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                          Connect your bank account to receive payouts
+                        </p>
+                        <Button 
+                          className="w-full gap-2" 
+                          onClick={() => connectOnboard.mutate()}
+                          disabled={connectOnboard.isPending}
+                          data-testid="button-connect-bank"
+                        >
+                          {connectOnboard.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ExternalLink className="w-4 h-4" />
+                          )}
+                          Connect Bank Account
+                        </Button>
+                      </div>
+                    ) : !connectStatus.payoutsEnabled ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-yellow-600">
+                          Your account setup is incomplete
+                        </p>
+                        <Button 
+                          className="w-full gap-2" 
+                          variant="outline"
+                          onClick={() => connectOnboard.mutate()}
+                          disabled={connectOnboard.isPending}
+                          data-testid="button-complete-setup"
+                        >
+                          {connectOnboard.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ExternalLink className="w-4 h-4" />
+                          )}
+                          Complete Setup
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm text-green-600 flex items-center gap-1">
+                          <Check className="w-4 h-4" /> Bank account connected
+                        </p>
+                        <Button 
+                          className="w-full" 
+                          onClick={() => requestPayout.mutate()}
+                          disabled={requestPayout.isPending || (connectStatus.balance || 0) < 500}
+                          data-testid="button-request-payout"
+                        >
+                          {requestPayout.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : null}
+                          {(connectStatus.balance || 0) < 500 
+                            ? "Minimum $5 to withdraw" 
+                            : `Withdraw $${((connectStatus.balance || 0) / 100).toFixed(2)}`}
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
