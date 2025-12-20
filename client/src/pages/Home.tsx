@@ -5,21 +5,39 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Search, MapPin, Star } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "wouter";
 
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | undefined>();
+  const [userLocation, setUserLocation] = useState<[number, number]>([40.7128, -74.0060]);
+  const [locationLoading, setLocationLoading] = useState(true);
+  
+  // Get user's actual location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation([position.coords.latitude, position.coords.longitude]);
+          setLocationLoading(false);
+        },
+        (error) => {
+          console.log("Geolocation error:", error.message);
+          setLocationLoading(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      setLocationLoading(false);
+    }
+  }, []);
   
   // URL params logic could be added here for sharing searches
   const { data: services = [], isLoading } = useServices({ 
     search: searchTerm, 
     category: activeCategory 
   });
-
-  // Mock user location for demo - in a real app, use geolocation API
-  const userLocation: [number, number] = [40.7128, -74.0060];
 
   // Dynamically extract unique categories from services
   const categories = useMemo(() => {

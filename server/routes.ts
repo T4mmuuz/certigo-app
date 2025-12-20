@@ -1104,50 +1104,5 @@ export async function registerRoutes(
     }
   });
 
-  // Seed Data
-  await seedDatabase();
-
   return httpServer;
-}
-
-async function seedDatabase() {
-  const existingUsers = await storage.getUserByUsername("plumber_john");
-  if (!existingUsers) {
-    const provider = await storage.createUser({
-      username: "plumber_john",
-      password: "password123",
-      name: "John the Plumber",
-      role: "provider",
-      bio: "20 years of experience in fixing leaks and pipes.",
-      lat: 40.7128,
-      lng: -74.0060
-    });
-
-    const customer = await storage.createUser({
-      username: "customer_jane",
-      password: "password123",
-      name: "Jane Doe",
-      role: "customer",
-      bio: "Just moved to the city.",
-      lat: 40.7138,
-      lng: -74.0070
-    });
-
-    const service = await storage.createService({
-      providerId: provider.id,
-      title: "Emergency Plumbing",
-      description: "Available 24/7 for any plumbing emergency.",
-      category: "Plumbing",
-      price: 100,
-      lat: 40.7128,
-      lng: -74.0060
-    });
-
-    await storage.createReview({
-      serviceId: service.id,
-      customerId: customer.id,
-      rating: 5,
-      comment: "John saved my basement from flooding! Highly recommended."
-    });
-  }
 }
