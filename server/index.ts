@@ -67,8 +67,10 @@ async function initStripe() {
   }
 }
 
-// Initialize Stripe on startup
-await initStripe();
+// Initialize Stripe on startup (wrapped in IIFE for CommonJS compatibility)
+(async () => {
+  await initStripe();
+})();
 
 // Register Stripe webhook route BEFORE express.json()
 app.post(
