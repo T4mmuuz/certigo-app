@@ -4,16 +4,9 @@ import { useServices } from "@/hooks/use-services";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, MapPin, Wrench, Zap, Truck, Home as HomeIcon, Star } from "lucide-react";
+import { Search, MapPin, Star } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
-
-const CATEGORIES = [
-  { id: "plumbing", label: "Plumbing", icon: Wrench },
-  { id: "electrical", label: "Electrical", icon: Zap },
-  { id: "moving", label: "Moving", icon: Truck },
-  { id: "cleaning", label: "Cleaning", icon: HomeIcon },
-];
 
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -27,6 +20,12 @@ export default function Home() {
 
   // Mock user location for demo - in a real app, use geolocation API
   const userLocation: [number, number] = [40.7128, -74.0060];
+
+  // Dynamically extract unique categories from services
+  const categories = useMemo(() => {
+    const uniqueCats = new Set(services.map(s => s.category));
+    return Array.from(uniqueCats).sort();
+  }, [services]);
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
@@ -61,16 +60,15 @@ export default function Home() {
               >
                 All
               </Button>
-              {CATEGORIES.map(cat => (
+              {categories.map(cat => (
                 <Button 
-                  key={cat.id}
-                  variant={activeCategory === cat.id ? "default" : "outline"} 
+                  key={cat}
+                  variant={activeCategory === cat ? "default" : "outline"} 
                   size="sm"
-                  className="rounded-full flex-shrink-0 gap-1.5"
-                  onClick={() => setActiveCategory(activeCategory === cat.id ? undefined : cat.id)}
+                  className="rounded-full flex-shrink-0"
+                  onClick={() => setActiveCategory(activeCategory === cat ? undefined : cat)}
                 >
-                  <cat.icon className="w-3.5 h-3.5" />
-                  {cat.label}
+                  <span className="capitalize">{cat}</span>
                 </Button>
               ))}
             </div>

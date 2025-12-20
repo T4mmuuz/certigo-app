@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Plus, Settings, User as UserIcon } from "lucide-react";
 import { useState } from "react";
@@ -133,17 +132,12 @@ export default function Profile() {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>Category</Label>
-                            <Select value={cat} onValueChange={setCat}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="plumbing">Plumbing</SelectItem>
-                                <SelectItem value="electrical">Electrical</SelectItem>
-                                <SelectItem value="cleaning">Cleaning</SelectItem>
-                                <SelectItem value="moving">Moving</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <Input 
+                              value={cat} 
+                              onChange={e => setCat(e.target.value)} 
+                              placeholder="e.g. Plumbing, Welding, Gardening"
+                              className="border-red-300 focus:border-red-500"
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>Hourly Rate ($)</Label>
