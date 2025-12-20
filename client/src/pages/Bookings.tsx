@@ -1,21 +1,35 @@
 import { useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useBookings } from "@/hooks/use-bookings";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
-import { Calendar, Clock, MapPin, Loader2, MessageSquare } from "lucide-react";
+import { Calendar, Clock, MapPin, Loader2, MessageSquare, X, AlertTriangle } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Bookings() {
-  const { data: bookings, isLoading } = useBookings();
+  const { data: bookings, isLoading, refetch } = useBookings();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [loadingChatBookingId, setLoadingChatBookingId] = useState<number | null>(null);
+  const [cancellingBookingId, setCancellingBookingId] = useState<number | null>(null);
 
   const startChatMutation = useMutation({
     mutationFn: async (bookingId: number) => {
@@ -45,6 +59,33 @@ export default function Bookings() {
     },
   });
 
+  const cancelBookingMutation = useMutation({
+    mutationFn: async (bookingId: number) => {
+      setCancellingBookingId(bookingId);
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/cancel`, {
+        cancelledBy: user?.role === "provider" ? "provider" : "customer"
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setCancellingBookingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({
+        title: "Booking Cancelled",
+        description: data.message || "Your booking has been cancelled.",
+      });
+    },
+    onError: (error: Error) => {
+      setCancellingBookingId(null);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel booking. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const getStatusColor = (status: string) => {
     switch(status) {
       case 'accepted': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40';
@@ -67,6 +108,12 @@ export default function Bookings() {
     }
   };
 
+  const canCancel = (status: string) => {
+    return status === 'pending' || status === 'accepted';
+  };
+
+  const isProvider = user?.role === "provider";
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -88,6 +135,9 @@ export default function Bookings() {
           <div className="grid gap-4">
             {bookings.map((booking) => {
               const isChatLoading = loadingChatBookingId === booking.id;
+              const isCancelling = cancellingBookingId === booking.id;
+              const showCancelButton = canCancel(booking.status);
+              
               return (
                 <Card key={booking.id} className="overflow-hidden hover:shadow-md transition-shadow" data-testid={`booking-card-${booking.id}`}>
                   <CardContent className="p-0 flex flex-col sm:flex-row">
@@ -126,20 +176,76 @@ export default function Bookings() {
                         </div>
                       </div>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => startChatMutation.mutate(booking.id)}
-                        disabled={isChatLoading || startChatMutation.isPending}
-                        data-testid={`button-chat-${booking.id}`}
-                      >
-                        {isChatLoading ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <MessageSquare className="w-4 h-4 mr-2" />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startChatMutation.mutate(booking.id)}
+                          disabled={isChatLoading || startChatMutation.isPending}
+                          data-testid={`button-chat-${booking.id}`}
+                        >
+                          {isChatLoading ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <MessageSquare className="w-4 h-4 mr-2" />
+                          )}
+                          {isChatLoading ? "Opening..." : "Chat"}
+                        </Button>
+
+                        {showCancelButton && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                                disabled={isCancelling}
+                                data-testid={`button-cancel-${booking.id}`}
+                              >
+                                {isCancelling ? (
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <X className="w-4 h-4 mr-2" />
+                                )}
+                                Cancel
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="flex items-center gap-2">
+                                  <AlertTriangle className="w-5 h-5 text-destructive" />
+                                  Cancel Booking
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="space-y-3">
+                                  <p>Are you sure you want to cancel this booking for <strong>{booking.service.title}</strong>?</p>
+                                  
+                                  <div className="bg-muted/50 p-3 rounded-md text-sm space-y-2">
+                                    <p className="font-medium text-foreground">Refund Policy:</p>
+                                    {isProvider ? (
+                                      <p className="text-green-600 dark:text-green-400">
+                                        As a provider, if you cancel, the customer will receive a full refund.
+                                      </p>
+                                    ) : (
+                                      <p className="text-amber-600 dark:text-amber-400">
+                                        Customer cancellations are not eligible for refunds. Only provider cancellations or no-shows result in refunds.
+                                      </p>
+                                    )}
+                                  </div>
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => cancelBookingMutation.mutate(booking.id)}
+                                >
+                                  Yes, Cancel Booking
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
-                        {isChatLoading ? "Opening..." : "Chat"}
-                      </Button>
+                      </div>
                     </div>
 
                     <div className="bg-secondary/20 p-6 flex flex-col justify-center items-end min-w-[150px] border-t sm:border-t-0 sm:border-l">
