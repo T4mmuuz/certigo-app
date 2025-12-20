@@ -175,10 +175,6 @@ export default function Profile() {
                    <span className="text-muted-foreground">Joined</span>
                    <span className="font-medium">Oct 2023</span>
                 </div>
-                <div className="flex items-center justify-between text-sm py-2 border-b">
-                   <span className="text-muted-foreground">Location</span>
-                   <span className="font-medium">New York, NY</span>
-                </div>
               </div>
 
               <div className="mt-8 px-6">
