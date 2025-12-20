@@ -12,6 +12,7 @@ import { pool } from "./db";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 
 const PLATFORM_COMMISSION_RATE = 0.15; // 15% commission
+const PREMIUM_PRICE_CENTS = 2700; // $27/month premium subscription
 
 export async function registerRoutes(
   httpServer: Server,
@@ -330,6 +331,256 @@ export async function registerRoutes(
       console.error('Error fetching provider earnings:', err);
       res.status(500).json({ message: "Failed to fetch earnings" });
     }
+  });
+
+  // Cancel booking (with refund rules)
+  app.post("/api/bookings/:id/cancel", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const { cancelledBy } = req.body;
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      // Verify the user is authorized to cancel
+      const service = await storage.getService(booking.serviceId);
+      if (!service) return res.status(404).json({ message: "Service not found" });
+      
+      const isCustomer = booking.customerId === userId;
+      const isProvider = service.providerId === userId;
+      
+      if (!isCustomer && !isProvider) {
+        return res.status(403).json({ message: "Not authorized to cancel this booking" });
+      }
+      
+      // Calculate time until booking
+      const hoursUntilBooking = (new Date(booking.date).getTime() - Date.now()) / (1000 * 60 * 60);
+      
+      // Get transaction for this booking
+      const transaction = await storage.getTransactionByBookingId(bookingId);
+      
+      let refundEligible = false;
+      let refundReason = "";
+      
+      if (cancelledBy === "provider" || isProvider) {
+        // Provider cancels or no-shows → Full refund to customer
+        refundEligible = true;
+        refundReason = "Provider cancelled - full refund";
+      } else if (isCustomer) {
+        // Customer cancels → No refund regardless of timing
+        // Only provider cancellations/no-shows result in refunds
+        refundEligible = false;
+        if (hoursUntilBooking < 24) {
+          refundReason = "Customer cancelled within 24 hours - no refund";
+        } else {
+          refundReason = "Customer cancelled - no refund per policy";
+        }
+      }
+      
+      // Update booking status
+      await storage.cancelBooking(bookingId, cancelledBy || (isProvider ? "provider" : "customer"));
+      
+      // Process refund if eligible and payment was made via app
+      if (refundEligible && transaction && transaction.status === "completed" && booking.paymentMethod === "app") {
+        try {
+          const stripe = await getUncachableStripeClient();
+          
+          if (transaction.stripePaymentIntentId) {
+            const refund = await stripe.refunds.create({
+              payment_intent: transaction.stripePaymentIntentId,
+            });
+            
+            await storage.updateTransactionRefund(transaction.id, refund.id, refundReason);
+          }
+          
+          return res.json({ 
+            success: true, 
+            refunded: true, 
+            message: "Booking cancelled and refund processed" 
+          });
+        } catch (refundErr) {
+          console.error('Refund error:', refundErr);
+          return res.json({ 
+            success: true, 
+            refunded: false, 
+            message: "Booking cancelled but refund failed - please contact support" 
+          });
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        refunded: false, 
+        message: refundEligible ? "Booking cancelled" : `Booking cancelled - ${refundReason}` 
+      });
+    } catch (err) {
+      console.error('Cancel booking error:', err);
+      res.status(500).json({ message: "Failed to cancel booking" });
+    }
+  });
+
+  // Mark provider no-show (customer reports)
+  app.post("/api/bookings/:id/provider-noshow", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      if (booking.customerId !== userId) {
+        return res.status(403).json({ message: "Only the customer can report provider no-show" });
+      }
+      
+      // Update booking status to provider_noshow
+      await storage.updateBookingStatus(bookingId, "provider_noshow");
+      
+      // Process full refund only for app payments
+      if (booking.paymentMethod === "app") {
+        const transaction = await storage.getTransactionByBookingId(bookingId);
+        if (transaction && transaction.status === "completed" && transaction.stripePaymentIntentId) {
+          try {
+            const stripe = await getUncachableStripeClient();
+            const refund = await stripe.refunds.create({
+              payment_intent: transaction.stripePaymentIntentId,
+            });
+            await storage.updateTransactionRefund(transaction.id, refund.id, "Provider no-show - full refund");
+            return res.json({ success: true, message: "Provider no-show reported - full refund processed" });
+          } catch (refundErr) {
+            console.error('Refund error:', refundErr);
+            return res.json({ success: true, message: "Provider no-show reported - refund pending, contact support" });
+          }
+        }
+      }
+      
+      // For cash payments, no refund needed (no payment was made through the app)
+      res.json({ 
+        success: true, 
+        message: booking.paymentMethod === "cash" 
+          ? "Provider no-show reported - no app payment was made" 
+          : "Provider no-show reported"
+      });
+    } catch (err) {
+      console.error('Provider no-show error:', err);
+      res.status(500).json({ message: "Failed to process no-show report" });
+    }
+  });
+
+  // Mark customer no-show (provider reports)
+  app.post("/api/bookings/:id/customer-noshow", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) {
+        return res.status(403).json({ message: "Only the provider can report customer no-show" });
+      }
+      
+      // Update booking status - customer no-shows don't get refunds
+      await storage.updateBookingStatus(bookingId, "customer_noshow");
+      
+      res.json({ success: true, message: "Customer no-show recorded - no refund issued per policy" });
+    } catch (err) {
+      console.error('Customer no-show error:', err);
+      res.status(500).json({ message: "Failed to process no-show report" });
+    }
+  });
+
+  // Premium subscription - create checkout
+  app.post("/api/premium/subscribe", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    if ((req.user as any).role !== 'provider') {
+      return res.status(403).json({ message: "Only providers can subscribe to premium" });
+    }
+    
+    try {
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: 'CertiGo Premium',
+                description: 'Verified Pro badge, higher ranking, advanced analytics, and more!',
+              },
+              unit_amount: PREMIUM_PRICE_CENTS,
+              recurring: {
+                interval: 'month',
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'subscription',
+        success_url: `${baseUrl}/premium/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/premium`,
+        metadata: {
+          userId: (req.user as any).id.toString(),
+          type: 'premium_subscription',
+        },
+      });
+      
+      res.json({ url: session.url, sessionId: session.id });
+    } catch (err) {
+      console.error('Premium subscription error:', err);
+      res.status(500).json({ message: "Failed to create subscription" });
+    }
+  });
+
+  // Confirm premium subscription
+  app.post("/api/premium/confirm", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const { sessionId } = req.body;
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      
+      if (session.payment_status === 'paid' && session.subscription) {
+        const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
+        const premiumExpiresAt = new Date((subscription as any).current_period_end * 1000);
+        
+        await storage.updateUserPremium(
+          (req.user as any).id,
+          true,
+          premiumExpiresAt,
+          subscription.id
+        );
+        
+        res.json({ success: true, premiumExpiresAt });
+      } else {
+        res.json({ success: false, message: "Subscription not active" });
+      }
+    } catch (err) {
+      console.error('Premium confirmation error:', err);
+      res.status(500).json({ message: "Failed to confirm subscription" });
+    }
+  });
+
+  // Get premium status
+  app.get("/api/premium/status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    res.json({
+      isPremium: user.isPremium,
+      premiumExpiresAt: user.premiumExpiresAt,
+    });
   });
 
   // Seed Data

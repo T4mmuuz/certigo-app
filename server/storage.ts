@@ -25,10 +25,20 @@ export interface IStorage {
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   getTransactionByCheckoutSession(sessionId: string): Promise<Transaction | undefined>;
+  getTransactionByBookingId(bookingId: number): Promise<Transaction | undefined>;
   updateTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<Transaction>;
+  updateTransactionRefund(id: number, stripeRefundId: string, reason: string): Promise<Transaction>;
   getPlatformEarnings(): Promise<{ totalEarnings: number; totalTransactions: number; recentTransactions: Transaction[] }>;
   getProviderEarnings(providerId: number): Promise<{ totalEarnings: number; transactions: Transaction[] }>;
   updateBookingDepositPaid(bookingId: number): Promise<Booking>;
+  
+  // Booking management
+  getBooking(id: number): Promise<Booking | undefined>;
+  cancelBooking(id: number, cancelledBy: string): Promise<Booking>;
+  updateBookingStatus(id: number, status: string): Promise<Booking>;
+  
+  // Premium
+  updateUserPremium(userId: number, isPremium: boolean, premiumExpiresAt: Date | null, stripeSubscriptionId: string | null): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -186,6 +196,49 @@ export class DatabaseStorage implements IStorage {
 
   async updateBookingDepositPaid(bookingId: number): Promise<Booking> {
     const [updated] = await db.update(bookings).set({ depositPaid: true }).where(eq(bookings.id, bookingId)).returning();
+    return updated;
+  }
+
+  async getTransactionByBookingId(bookingId: number): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.bookingId, bookingId));
+    return transaction;
+  }
+
+  async updateTransactionRefund(id: number, stripeRefundId: string, reason: string): Promise<Transaction> {
+    const [updated] = await db.update(transactions).set({ 
+      status: 'refunded',
+      stripeRefundId,
+      refundReason: reason,
+      refundedAt: new Date(),
+    }).where(eq(transactions.id, id)).returning();
+    return updated;
+  }
+
+  async getBooking(id: number): Promise<Booking | undefined> {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    return booking;
+  }
+
+  async cancelBooking(id: number, cancelledBy: string): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({ 
+      status: 'cancelled',
+      cancelledBy: cancelledBy as any,
+      cancelledAt: new Date(),
+    }).where(eq(bookings.id, id)).returning();
+    return updated;
+  }
+
+  async updateBookingStatus(id: number, status: string): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({ status: status as any }).where(eq(bookings.id, id)).returning();
+    return updated;
+  }
+
+  async updateUserPremium(userId: number, isPremium: boolean, premiumExpiresAt: Date | null, stripeSubscriptionId: string | null): Promise<User> {
+    const [updated] = await db.update(users).set({ 
+      isPremium,
+      premiumExpiresAt,
+      stripeSubscriptionId,
+    }).where(eq(users.id, userId)).returning();
     return updated;
   }
 }

@@ -12,6 +12,9 @@ export const users = pgTable("users", {
   bio: text("bio"),
   lat: real("lat"),
   lng: real("lng"),
+  isPremium: boolean("is_premium").default(false).notNull(),
+  premiumExpiresAt: timestamp("premium_expires_at"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
 });
 
 export const services = pgTable("services", {
@@ -29,9 +32,13 @@ export const bookings = pgTable("bookings", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull(),
   serviceId: integer("service_id").notNull(),
-  status: text("status", { enum: ["pending", "accepted", "completed", "cancelled"] }).default("pending").notNull(),
+  status: text("status", { enum: ["pending", "accepted", "completed", "cancelled", "provider_noshow", "customer_noshow"] }).default("pending").notNull(),
   date: timestamp("date").notNull(),
   depositPaid: boolean("deposit_paid").default(false).notNull(),
+  paymentMethod: text("payment_method", { enum: ["app", "cash"] }).default("app").notNull(),
+  cancelledBy: text("cancelled_by", { enum: ["customer", "provider"] }),
+  cancelledAt: timestamp("cancelled_at"),
+  hours: integer("hours").default(1).notNull(),
 });
 
 export const reviews = pgTable("reviews", {
@@ -56,6 +63,9 @@ export const transactions = pgTable("transactions", {
   stripeCheckoutSessionId: text("stripe_checkout_session_id"),
   status: text("status", { enum: ["pending", "completed", "refunded", "failed"] }).default("pending").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  refundedAt: timestamp("refunded_at"),
+  refundReason: text("refund_reason"),
+  stripeRefundId: text("stripe_refund_id"),
 });
 
 // Relations
@@ -118,7 +128,7 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
 // Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
-export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, depositPaid: true });
+export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, depositPaid: true, cancelledAt: true });
 export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, createdAt: true });
 

@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Search, User, LogOut, Briefcase, Calendar, DollarSign } from "lucide-react";
+import { Search, User, LogOut, Briefcase, Calendar, DollarSign, Crown } from "lucide-react";
 import { useState } from "react";
 import logoImage from "@assets/generated_images/certigo_professional_marketplace_logo.png";
 
@@ -69,9 +69,14 @@ export function Navbar() {
                   <Calendar className="w-4 h-4 mr-2" /> My Bookings
                 </DropdownMenuItem>
                 {user.role === 'provider' && (
-                  <DropdownMenuItem onClick={() => setLocation("/profile")} className="cursor-pointer rounded-lg text-primary font-medium">
-                    <Briefcase className="w-4 h-4 mr-2" /> My Services
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem onClick={() => setLocation("/profile")} className="cursor-pointer rounded-lg text-primary font-medium">
+                      <Briefcase className="w-4 h-4 mr-2" /> My Services
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setLocation("/premium")} className="cursor-pointer rounded-lg text-yellow-600 font-medium">
+                      <Crown className="w-4 h-4 mr-2" /> Premium
+                    </DropdownMenuItem>
+                  </>
                 )}
                 <DropdownMenuItem onClick={() => setLocation("/earnings")} className="cursor-pointer rounded-lg text-green-600 font-medium">
                   <DollarSign className="w-4 h-4 mr-2" /> Earnings Dashboard

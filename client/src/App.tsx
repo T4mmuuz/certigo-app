@@ -12,6 +12,8 @@ import Profile from "@/pages/Profile";
 import PaymentSuccess from "@/pages/PaymentSuccess";
 import PaymentCancel from "@/pages/PaymentCancel";
 import Earnings from "@/pages/Earnings";
+import Premium from "@/pages/Premium";
+import PremiumSuccess from "@/pages/PremiumSuccess";
 
 function Router() {
   return (
@@ -25,6 +27,9 @@ function Router() {
       <Route path="/payment/success" component={PaymentSuccess} />
       <Route path="/payment/cancel" component={PaymentCancel} />
       <Route path="/earnings" component={Earnings} />
+      <Route path="/premium" component={Premium} />
+      <Route path="/premium/success" component={PremiumSuccess} />
+      <Route path="/premium/cancel" component={Premium} />
       <Route component={NotFound} />
     </Switch>
   );

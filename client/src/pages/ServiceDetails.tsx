@@ -10,11 +10,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Star, MapPin, CheckCircle2, ShieldCheck, Clock, Calendar as CalendarIcon, Loader2, CreditCard } from "lucide-react";
+import { Star, MapPin, CheckCircle2, ShieldCheck, Clock, Calendar as CalendarIcon, Loader2, CreditCard, Crown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { PaymentOptionsDialog } from "@/components/PaymentOptionsDialog";
 
 export default function ServiceDetails() {
   const [match, params] = useRoute("/services/:id");
@@ -27,6 +29,7 @@ export default function ServiceDetails() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [hours, setHours] = useState(1);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [step, setStep] = useState<"date" | "payment" | "success">("date");
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -40,36 +43,65 @@ export default function ServiceDetails() {
 
   if (!service) return <div>Not found</div>;
 
-  const handleBook = async () => {
+  const handleProceedToPayment = () => {
     if (!user) {
       toast({ title: "Please log in", description: "You need an account to book services.", variant: "destructive" });
       return;
     }
     if (!date) return;
     
+    setIsDialogOpen(false);
+    setIsPaymentDialogOpen(true);
+  };
+
+  const handlePaymentMethodSelect = async (method: "app" | "cash") => {
+    setIsPaymentDialogOpen(false);
     setIsProcessing(true);
-    try {
-      // Create checkout session with Stripe
-      const response = await apiRequest("POST", "/api/checkout", {
-        serviceId: service.id,
-        hours,
-      });
-      const data = await response.json();
-      
-      if (data.url) {
-        // Redirect to Stripe checkout
-        window.location.href = data.url;
-      } else {
-        throw new Error("No checkout URL received");
+    
+    if (method === "cash") {
+      // Create booking with cash payment - no Stripe needed
+      try {
+        await createBooking({
+          serviceId: service.id,
+          customerId: user!.id,
+          date: date!,
+          status: "pending",
+          paymentMethod: "cash",
+          hours,
+        });
+        setStep("success");
+        setIsDialogOpen(true);
+        toast({ 
+          title: "Booking Confirmed!", 
+          description: "The provider will contact you soon. Remember to pay in cash when they arrive." 
+        });
+      } catch (error) {
+        toast({ title: "Error", description: "Could not create booking.", variant: "destructive" });
       }
-    } catch (error) {
-      console.error("Checkout error:", error);
-      toast({ 
-        title: "Payment Error", 
-        description: "Could not start checkout. Please try again.", 
-        variant: "destructive" 
-      });
       setIsProcessing(false);
+    } else {
+      // App payment - redirect to Stripe
+      try {
+        const response = await apiRequest("POST", "/api/checkout", {
+          serviceId: service.id,
+          hours,
+        });
+        const data = await response.json();
+        
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error("No checkout URL received");
+        }
+      } catch (error) {
+        console.error("Checkout error:", error);
+        toast({ 
+          title: "Payment Error", 
+          description: "Could not start checkout. Please try again.", 
+          variant: "destructive" 
+        });
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -263,7 +295,7 @@ export default function ServiceDetails() {
 
                      <DialogFooter>
                        {step === 'date' && (
-                         <Button onClick={handleBook} className="w-full gap-2" disabled={!date || isProcessing}>
+                         <Button onClick={handleProceedToPayment} className="w-full gap-2" disabled={!date || isProcessing}>
                            {isProcessing ? (
                              <>
                                <Loader2 className="w-4 h-4 animate-spin" />
@@ -272,7 +304,7 @@ export default function ServiceDetails() {
                            ) : (
                              <>
                                <CreditCard className="w-4 h-4" />
-                               Pay ${service.price * hours} with Stripe
+                               Continue - ${service.price * hours}
                              </>
                            )}
                          </Button>
@@ -287,7 +319,7 @@ export default function ServiceDetails() {
                  </Dialog>
                  
                  <p className="text-xs text-center text-muted-foreground mt-4">
-                   You won't be charged until you confirm the appointment time.
+                   Pay securely in app or with cash when provider arrives.
                  </p>
                </Card>
              </div>
@@ -295,6 +327,14 @@ export default function ServiceDetails() {
 
         </div>
       </main>
+
+      <PaymentOptionsDialog
+        open={isPaymentDialogOpen}
+        onOpenChange={setIsPaymentDialogOpen}
+        onSelectPayment={handlePaymentMethodSelect}
+        serviceName={service.title}
+        totalAmount={service.price * hours}
+      />
     </div>
   );
 }
