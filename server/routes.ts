@@ -859,7 +859,7 @@ export async function registerRoutes(
       
       await storage.createNotification({
         userId: recipientId,
-        type: "booking_confirmed", // Using existing type as it fits
+        type: "new_message",
         title: "New Message",
         body: `${sender?.name || 'Someone'} sent you a message`,
         metadata: JSON.stringify({ conversationId, bookingId: conversation.bookingId }),

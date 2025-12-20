@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bell, Check, Calendar, Star, DollarSign, MapPin, MessageSquare } from "lucide-react";
+import { Bell, Check, Calendar, Star, DollarSign, MapPin, MessageSquare, ChevronRight } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -30,6 +30,7 @@ const notificationIcons: Record<string, any> = {
   provider_arrived: MapPin,
   payment_received: DollarSign,
   review_received: Star,
+  new_message: MessageSquare,
 };
 
 export default function Notifications() {
@@ -62,20 +63,63 @@ export default function Notifications() {
   const notifications = notificationData?.notifications || [];
   const unreadCount = notificationData?.unreadCount || 0;
 
+  const getNotificationDestination = (notif: Notification): string | null => {
+    if (!notif.metadata) return null;
+    
+    try {
+      const meta = JSON.parse(notif.metadata);
+      
+      switch (notif.type) {
+        case "new_message":
+          if (meta.conversationId) {
+            return `/chat/${meta.conversationId}`;
+          }
+          return "/messages";
+          
+        case "booking_new":
+        case "booking_confirmed":
+        case "booking_cancelled":
+        case "provider_arriving":
+        case "provider_arrived":
+          return "/bookings";
+          
+        case "payment_received":
+          if (user?.role === "provider") {
+            return "/earnings";
+          }
+          return "/bookings";
+          
+        case "review_received":
+          if (meta.serviceId) {
+            return `/services/${meta.serviceId}`;
+          }
+          return "/profile";
+          
+        default:
+          if (meta.conversationId) {
+            return `/chat/${meta.conversationId}`;
+          }
+          if (meta.bookingId) {
+            return "/bookings";
+          }
+          if (meta.serviceId) {
+            return `/services/${meta.serviceId}`;
+          }
+          return null;
+      }
+    } catch {
+      return null;
+    }
+  };
+
   const handleNotificationClick = (notif: Notification) => {
     if (!notif.readAt) {
       markReadMutation.mutate(notif.id);
     }
     
-    if (notif.metadata) {
-      try {
-        const meta = JSON.parse(notif.metadata);
-        if (meta.bookingId) {
-          setLocation("/bookings");
-        } else if (meta.serviceId) {
-          setLocation(`/services/${meta.serviceId}`);
-        }
-      } catch {}
+    const destination = getNotificationDestination(notif);
+    if (destination) {
+      setLocation(destination);
     }
   };
 
@@ -145,6 +189,7 @@ export default function Notifications() {
                 <div className="space-y-1">
                   {notifications.map((notif) => {
                     const IconComponent = notificationIcons[notif.type] || Bell;
+                    const hasDestination = !!getNotificationDestination(notif);
                     return (
                       <div
                         key={notif.id}
@@ -154,7 +199,7 @@ export default function Notifications() {
                         }`}
                         data-testid={`notification-item-${notif.id}`}
                       >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
                           !notif.readAt ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
                         }`}>
                           <IconComponent className="w-5 h-5" />
@@ -175,6 +220,9 @@ export default function Notifications() {
                             {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
                           </p>
                         </div>
+                        {hasDestination && (
+                          <ChevronRight className="w-5 h-5 text-muted-foreground/50 flex-shrink-0 mt-2" />
+                        )}
                       </div>
                     );
                   })}
