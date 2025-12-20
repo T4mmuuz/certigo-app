@@ -32,7 +32,7 @@ export function Navbar() {
       <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 font-display text-2xl font-bold text-primary hover:opacity-90 transition-opacity">
-          <img src={logoImage} alt="CertiGo Logo" className="w-10 h-10 rounded-lg" />
+          <img src={logoImage} alt="CertiGo Logo" className="w-12 h-12 rounded-lg" />
           <span className="hidden sm:inline">CertiGo</span>
         </Link>
 

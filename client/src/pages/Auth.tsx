@@ -66,7 +66,7 @@ export default function AuthPage() {
 
       <div className="w-full max-w-md animate-fade-in">
         <div className="text-center mb-8">
-          <img src={logoImage} alt="CertiGo Logo" className="w-16 h-16 rounded-xl shadow-lg shadow-primary/30 mx-auto mb-4" />
+          <img src={logoImage} alt="CertiGo Logo" className="w-24 h-24 rounded-xl shadow-lg shadow-primary/30 mx-auto mb-4" />
           <h1 className="text-3xl font-display font-bold text-foreground">CertiGo</h1>
           <p className="text-muted-foreground mt-2">Find trusted local experts in minutes.</p>
         </div>
