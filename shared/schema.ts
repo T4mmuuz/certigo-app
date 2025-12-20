@@ -146,6 +146,51 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   }),
 }));
 
+// Conversations for chat between customer and provider
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().unique(),
+  customerId: integer("customer_id").notNull(),
+  providerId: integer("provider_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull(),
+  senderId: integer("sender_id").notNull(),
+  content: text("content").notNull(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  booking: one(bookings, {
+    fields: [conversations.bookingId],
+    references: [bookings.id],
+  }),
+  customer: one(users, {
+    fields: [conversations.customerId],
+    references: [users.id],
+  }),
+  provider: one(users, {
+    fields: [conversations.providerId],
+    references: [users.id],
+  }),
+  messages: many(messages),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [messages.conversationId],
+    references: [conversations.id],
+  }),
+  sender: one(users, {
+    fields: [messages.senderId],
+    references: [users.id],
+  }),
+}));
+
 // Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
@@ -153,6 +198,8 @@ export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true,
 export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, createdAt: true });
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, readAt: true });
+export const insertConversationSchema = createInsertSchema(conversations).omit({ id: true, createdAt: true });
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, readAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -167,3 +214,7 @@ export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;

@@ -2,18 +2,46 @@ import { Navbar } from "@/components/Navbar";
 import { useBookings } from "@/hooks/use-bookings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { Calendar, Clock, MapPin, Loader2 } from "lucide-react";
+import { Calendar, Clock, MapPin, Loader2, MessageSquare } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 
 export default function Bookings() {
   const { data: bookings, isLoading } = useBookings();
+  const [, setLocation] = useLocation();
+
+  const startChatMutation = useMutation({
+    mutationFn: async (bookingId: number) => {
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/chat`, {});
+      return response.json();
+    },
+    onSuccess: (conversation) => {
+      setLocation(`/chat/${conversation.id}`);
+    },
+  });
 
   const getStatusColor = (status: string) => {
     switch(status) {
-      case 'accepted': return 'bg-green-100 text-green-700 hover:bg-green-100';
-      case 'completed': return 'bg-blue-100 text-blue-700 hover:bg-blue-100';
-      case 'cancelled': return 'bg-red-100 text-red-700 hover:bg-red-100';
-      default: return 'bg-amber-100 text-amber-700 hover:bg-amber-100';
+      case 'accepted': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40';
+      case 'completed': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40';
+      case 'cancelled': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40';
+      case 'provider_noshow':
+      case 'customer_noshow': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40';
+      default: return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40';
+    }
+  };
+
+  const getStatusBgClass = (status: string) => {
+    switch(status) {
+      case 'accepted': return 'bg-green-500';
+      case 'completed': return 'bg-blue-500';
+      case 'cancelled': return 'bg-red-500';
+      case 'provider_noshow':
+      case 'customer_noshow': return 'bg-orange-500';
+      default: return 'bg-amber-500';
     }
   };
 
@@ -37,10 +65,9 @@ export default function Bookings() {
         ) : (
           <div className="grid gap-4">
             {bookings.map((booking) => (
-              <Card key={booking.id} className="overflow-hidden hover:shadow-md transition-shadow">
+              <Card key={booking.id} className="overflow-hidden hover:shadow-md transition-shadow" data-testid={`booking-card-${booking.id}`}>
                 <CardContent className="p-0 flex flex-col sm:flex-row">
-                  {/* Status Strip */}
-                  <div className={`w-full sm:w-2 ${getStatusColor(booking.status).replace('text-', 'bg-').split(' ')[0]}`} />
+                  <div className={`w-full h-1 sm:w-2 sm:h-auto ${getStatusBgClass(booking.status)}`} />
                   
                   <div className="p-6 flex-1">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
@@ -48,12 +75,19 @@ export default function Bookings() {
                          <h3 className="text-lg font-bold">{booking.service.title}</h3>
                          <p className="text-sm text-muted-foreground">Booking #{booking.id}</p>
                        </div>
-                       <Badge className={`${getStatusColor(booking.status)} border-none capitalize`}>
-                         {booking.status}
-                       </Badge>
+                       <div className="flex items-center gap-2 flex-wrap">
+                         <Badge className={`${getStatusColor(booking.status)} border-none capitalize`}>
+                           {booking.status.replace('_', ' ')}
+                         </Badge>
+                         {booking.paymentMethod === 'cash' && (
+                           <Badge variant="outline" className="text-xs">
+                             Cash Payment
+                           </Badge>
+                         )}
+                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Calendar className="w-4 h-4 text-primary" />
                         <span className="font-medium text-foreground">{format(new Date(booking.date), 'MMMM d, yyyy')}</span>
@@ -67,13 +101,24 @@ export default function Bookings() {
                         <span>Service Location</span>
                       </div>
                     </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => startChatMutation.mutate(booking.id)}
+                      disabled={startChatMutation.isPending}
+                      data-testid={`button-chat-${booking.id}`}
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      {startChatMutation.isPending ? "Opening..." : "Chat"}
+                    </Button>
                   </div>
 
                   <div className="bg-secondary/20 p-6 flex flex-col justify-center items-end min-w-[150px] border-t sm:border-t-0 sm:border-l">
                     <span className="text-xs text-muted-foreground uppercase font-bold">Total</span>
                     <span className="text-2xl font-bold text-primary">${booking.service.price}</span>
                     {booking.depositPaid && (
-                      <span className="text-xs text-green-600 font-medium mt-1 flex items-center">
+                      <span className="text-xs text-green-600 dark:text-green-400 font-medium mt-1 flex items-center">
                         Deposit Paid
                       </span>
                     )}

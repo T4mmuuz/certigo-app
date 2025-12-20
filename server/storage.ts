@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, services, bookings, reviews, transactions, notifications, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification } from "@shared/schema";
+import { users, services, bookings, reviews, transactions, notifications, conversations, messages, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage } from "@shared/schema";
 import { eq, ilike, or, sql, desc, isNull, and } from "drizzle-orm";
 
 export interface IStorage {
@@ -49,6 +49,15 @@ export interface IStorage {
   
   // Location
   updateUserLocation(userId: number, lat: number, lng: number): Promise<User>;
+  
+  // Chat
+  getOrCreateConversation(bookingId: number, customerId: number, providerId: number): Promise<Conversation>;
+  getConversation(id: number): Promise<Conversation | undefined>;
+  getConversationByBooking(bookingId: number): Promise<Conversation | undefined>;
+  getUserConversations(userId: number): Promise<(Conversation & { otherUser: User; lastMessage: Message | null; unreadCount: number })[]>;
+  getMessages(conversationId: number): Promise<(Message & { sender: User })[]>;
+  createMessage(message: InsertMessage): Promise<Message>;
+  markMessagesRead(conversationId: number, userId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -291,6 +300,90 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return updated;
+  }
+
+  // Chat methods
+  async getOrCreateConversation(bookingId: number, customerId: number, providerId: number): Promise<Conversation> {
+    const existing = await db.select().from(conversations).where(eq(conversations.bookingId, bookingId));
+    if (existing.length > 0) return existing[0];
+    
+    const [created] = await db.insert(conversations).values({
+      bookingId,
+      customerId,
+      providerId,
+    }).returning();
+    return created;
+  }
+
+  async getConversation(id: number): Promise<Conversation | undefined> {
+    const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
+    return conv;
+  }
+
+  async getConversationByBooking(bookingId: number): Promise<Conversation | undefined> {
+    const [conv] = await db.select().from(conversations).where(eq(conversations.bookingId, bookingId));
+    return conv;
+  }
+
+  async getUserConversations(userId: number): Promise<(Conversation & { otherUser: User; lastMessage: Message | null; unreadCount: number })[]> {
+    const convs = await db.select().from(conversations)
+      .where(or(eq(conversations.customerId, userId), eq(conversations.providerId, userId)))
+      .orderBy(desc(conversations.createdAt));
+    
+    const results = await Promise.all(convs.map(async (conv) => {
+      const otherUserId = conv.customerId === userId ? conv.providerId : conv.customerId;
+      const [otherUser] = await db.select().from(users).where(eq(users.id, otherUserId));
+      
+      const msgs = await db.select().from(messages)
+        .where(eq(messages.conversationId, conv.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+      
+      const unreadResult = await db.select({ count: sql<number>`count(*)` })
+        .from(messages)
+        .where(and(
+          eq(messages.conversationId, conv.id),
+          isNull(messages.readAt),
+          sql`${messages.senderId} != ${userId}`
+        ));
+      
+      return {
+        ...conv,
+        otherUser,
+        lastMessage: msgs[0] || null,
+        unreadCount: Number(unreadResult[0]?.count || 0),
+      };
+    }));
+    
+    return results;
+  }
+
+  async getMessages(conversationId: number): Promise<(Message & { sender: User })[]> {
+    const msgs = await db.select({
+      message: messages,
+      sender: users,
+    })
+    .from(messages)
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(messages.createdAt);
+    
+    return msgs.map(m => ({ ...m.message, sender: m.sender }));
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const [created] = await db.insert(messages).values(message).returning();
+    return created;
+  }
+
+  async markMessagesRead(conversationId: number, userId: number): Promise<void> {
+    await db.update(messages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(messages.conversationId, conversationId),
+        sql`${messages.senderId} != ${userId}`,
+        isNull(messages.readAt)
+      ));
   }
 }
 

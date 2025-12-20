@@ -14,6 +14,8 @@ import PaymentCancel from "@/pages/PaymentCancel";
 import Earnings from "@/pages/Earnings";
 import Premium from "@/pages/Premium";
 import PremiumSuccess from "@/pages/PremiumSuccess";
+import Notifications from "@/pages/Notifications";
+import Chat from "@/pages/Chat";
 
 function Router() {
   return (
@@ -30,6 +32,9 @@ function Router() {
       <Route path="/premium" component={Premium} />
       <Route path="/premium/success" component={PremiumSuccess} />
       <Route path="/premium/cancel" component={Premium} />
+      <Route path="/notifications" component={Notifications} />
+      <Route path="/chat" component={Chat} />
+      <Route path="/chat/:conversationId" component={Chat} />
       <Route component={NotFound} />
     </Switch>
   );

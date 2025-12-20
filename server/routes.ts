@@ -720,6 +720,127 @@ export async function registerRoutes(
     }
   });
 
+  // === CHAT ROUTES ===
+
+  // Get user's conversations
+  app.get("/api/conversations", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const conversations = await storage.getUserConversations(userId);
+      res.json(conversations);
+    } catch (err) {
+      console.error('Get conversations error:', err);
+      res.status(500).json({ message: "Failed to get conversations" });
+    }
+  });
+
+  // Get or create conversation for a booking
+  app.post("/api/bookings/:id/chat", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service) return res.status(404).json({ message: "Service not found" });
+      
+      // Only customer or provider can access the chat
+      if (booking.customerId !== userId && service.providerId !== userId) {
+        return res.status(403).json({ message: "You don't have access to this chat" });
+      }
+      
+      const conversation = await storage.getOrCreateConversation(
+        bookingId,
+        booking.customerId,
+        service.providerId
+      );
+      
+      res.json(conversation);
+    } catch (err) {
+      console.error('Get/create chat error:', err);
+      res.status(500).json({ message: "Failed to access chat" });
+    }
+  });
+
+  // Get messages in a conversation
+  app.get("/api/conversations/:id/messages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      
+      // Only participants can access
+      if (conversation.customerId !== userId && conversation.providerId !== userId) {
+        return res.status(403).json({ message: "You don't have access to this chat" });
+      }
+      
+      // Mark messages as read
+      await storage.markMessagesRead(conversationId, userId);
+      
+      const messages = await storage.getMessages(conversationId);
+      res.json(messages);
+    } catch (err) {
+      console.error('Get messages error:', err);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  // Send a message
+  app.post("/api/conversations/:id/messages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      const { content } = req.body;
+      
+      if (!content || typeof content !== 'string' || content.trim().length === 0) {
+        return res.status(400).json({ message: "Message content is required" });
+      }
+      
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      
+      // Only participants can send messages
+      if (conversation.customerId !== userId && conversation.providerId !== userId) {
+        return res.status(403).json({ message: "You don't have access to this chat" });
+      }
+      
+      const message = await storage.createMessage({
+        conversationId,
+        senderId: userId,
+        content: content.trim(),
+      });
+      
+      // Notify the other user
+      const recipientId = conversation.customerId === userId ? conversation.providerId : conversation.customerId;
+      const sender = await storage.getUser(userId);
+      
+      await storage.createNotification({
+        userId: recipientId,
+        type: "booking_confirmed", // Using existing type as it fits
+        title: "New Message",
+        body: `${sender?.name || 'Someone'} sent you a message`,
+        metadata: JSON.stringify({ conversationId, bookingId: conversation.bookingId }),
+      });
+      
+      res.status(201).json(message);
+    } catch (err) {
+      console.error('Send message error:', err);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
   // Seed Data
   await seedDatabase();
 
