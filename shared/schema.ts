@@ -43,6 +43,21 @@ export const reviews = pgTable("reviews", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const transactions = pgTable("transactions", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull(),
+  customerId: integer("customer_id").notNull(),
+  providerId: integer("provider_id").notNull(),
+  serviceId: integer("service_id").notNull(),
+  amount: integer("amount").notNull(),
+  platformFee: integer("platform_fee").notNull(),
+  providerPayout: integer("provider_payout").notNull(),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  status: text("status", { enum: ["pending", "completed", "refunded", "failed"] }).default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   services: many(services),
@@ -81,11 +96,31 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
   }),
 }));
 
+export const transactionsRelations = relations(transactions, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [transactions.bookingId],
+    references: [bookings.id],
+  }),
+  customer: one(users, {
+    fields: [transactions.customerId],
+    references: [users.id],
+  }),
+  provider: one(users, {
+    fields: [transactions.providerId],
+    references: [users.id],
+  }),
+  service: one(services, {
+    fields: [transactions.serviceId],
+    references: [services.id],
+  }),
+}));
+
 // Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
 export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, depositPaid: true });
 export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
+export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -96,3 +131,5 @@ export type Booking = typeof bookings.$inferSelect;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;

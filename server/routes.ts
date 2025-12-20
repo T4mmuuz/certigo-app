@@ -9,6 +9,9 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { insertUserSchema, users } from "@shared/schema";
 import pgSession from "connect-pg-simple";
 import { pool } from "./db";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+
+const PLATFORM_COMMISSION_RATE = 0.15; // 15% commission
 
 export async function registerRoutes(
   httpServer: Server,
@@ -150,6 +153,182 @@ export async function registerRoutes(
     } catch (err) {
       if (err instanceof z.ZodError) res.status(400).json(err);
       else res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // Payment Routes
+  
+  // Get Stripe publishable key
+  app.get("/api/stripe/config", async (req, res) => {
+    try {
+      const publishableKey = await getStripePublishableKey();
+      res.json({ publishableKey });
+    } catch (err) {
+      console.error('Error getting Stripe config:', err);
+      res.status(500).json({ message: "Failed to get Stripe configuration" });
+    }
+  });
+
+  // Create checkout session for a booking
+  app.post("/api/checkout", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const { serviceId, bookingId, hours = 1 } = req.body;
+      
+      // Get the service details
+      const service = await storage.getService(serviceId);
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+
+      // Calculate amounts (in cents)
+      const totalAmount = service.price * hours * 100; // Convert to cents
+      const platformFee = Math.round(totalAmount * PLATFORM_COMMISSION_RATE);
+      const providerPayout = totalAmount - platformFee;
+
+      // Create the booking if not provided
+      let finalBookingId = bookingId;
+      if (!bookingId) {
+        const booking = await storage.createBooking({
+          customerId: (req.user as any).id,
+          serviceId,
+          date: new Date(),
+          status: "pending",
+        });
+        finalBookingId = booking.id;
+      }
+
+      // Create transaction record
+      const transaction = await storage.createTransaction({
+        bookingId: finalBookingId,
+        customerId: (req.user as any).id,
+        providerId: service.providerId,
+        serviceId,
+        amount: totalAmount,
+        platformFee,
+        providerPayout,
+        status: "pending",
+      });
+
+      // Create Stripe checkout session
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: service.title,
+                description: `${hours} hour(s) of ${service.category} service by ${service.provider.name}`,
+              },
+              unit_amount: totalAmount,
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        success_url: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/payment/cancel`,
+        metadata: {
+          transactionId: transaction.id.toString(),
+          bookingId: finalBookingId.toString(),
+        },
+      });
+
+      // Update transaction with checkout session ID
+      await storage.updateTransactionStatus(transaction.id, "pending", undefined);
+      
+      // Store the session ID in a way we can reference
+      await pool.query(
+        'UPDATE transactions SET stripe_checkout_session_id = $1 WHERE id = $2',
+        [session.id, transaction.id]
+      );
+
+      res.json({ url: session.url, sessionId: session.id });
+    } catch (err) {
+      console.error('Checkout error:', err);
+      res.status(500).json({ message: "Failed to create checkout session" });
+    }
+  });
+
+  // Handle successful payment
+  app.post("/api/payment/confirm", async (req, res) => {
+    try {
+      const { sessionId } = req.body;
+      
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      
+      if (session.payment_status === 'paid') {
+        // Update transaction status
+        const transaction = await storage.getTransactionByCheckoutSession(sessionId);
+        if (transaction) {
+          await storage.updateTransactionStatus(
+            transaction.id, 
+            'completed', 
+            session.payment_intent as string
+          );
+          await storage.updateBookingDepositPaid(transaction.bookingId);
+        }
+        
+        res.json({ success: true, status: 'paid' });
+      } else {
+        res.json({ success: false, status: session.payment_status });
+      }
+    } catch (err) {
+      console.error('Payment confirmation error:', err);
+      res.status(500).json({ message: "Failed to confirm payment" });
+    }
+  });
+
+  // Get platform earnings (admin only - simplified for MVP)
+  app.get("/api/admin/earnings", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const earnings = await storage.getPlatformEarnings();
+      res.json({
+        totalEarnings: earnings.totalEarnings / 100, // Convert to dollars
+        totalTransactions: earnings.totalTransactions,
+        recentTransactions: earnings.recentTransactions.map(t => ({
+          ...t,
+          amount: t.amount / 100,
+          platformFee: t.platformFee / 100,
+          providerPayout: t.providerPayout / 100,
+        })),
+        commissionRate: PLATFORM_COMMISSION_RATE * 100, // 15%
+      });
+    } catch (err) {
+      console.error('Error fetching earnings:', err);
+      res.status(500).json({ message: "Failed to fetch earnings" });
+    }
+  });
+
+  // Get provider earnings
+  app.get("/api/provider/earnings", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    if ((req.user as any).role !== 'provider') {
+      return res.status(403).json({ message: "Only providers can view their earnings" });
+    }
+    
+    try {
+      const earnings = await storage.getProviderEarnings((req.user as any).id);
+      res.json({
+        totalEarnings: earnings.totalEarnings / 100, // Convert to dollars
+        transactions: earnings.transactions.map(t => ({
+          ...t,
+          amount: t.amount / 100,
+          platformFee: t.platformFee / 100,
+          providerPayout: t.providerPayout / 100,
+        })),
+      });
+    } catch (err) {
+      console.error('Error fetching provider earnings:', err);
+      res.status(500).json({ message: "Failed to fetch earnings" });
     }
   });
 

@@ -9,6 +9,9 @@ import AuthPage from "@/pages/Auth";
 import ServiceDetails from "@/pages/ServiceDetails";
 import Bookings from "@/pages/Bookings";
 import Profile from "@/pages/Profile";
+import PaymentSuccess from "@/pages/PaymentSuccess";
+import PaymentCancel from "@/pages/PaymentCancel";
+import Earnings from "@/pages/Earnings";
 
 function Router() {
   return (
@@ -19,6 +22,9 @@ function Router() {
       <Route path="/services/:id" component={ServiceDetails} />
       <Route path="/bookings" component={Bookings} />
       <Route path="/profile" component={Profile} />
+      <Route path="/payment/success" component={PaymentSuccess} />
+      <Route path="/payment/cancel" component={PaymentCancel} />
+      <Route path="/earnings" component={Earnings} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -8,10 +8,13 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { Star, MapPin, CheckCircle2, ShieldCheck, Clock, Calendar as CalendarIcon, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Star, MapPin, CheckCircle2, ShieldCheck, Clock, Calendar as CalendarIcon, Loader2, CreditCard } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function ServiceDetails() {
   const [match, params] = useRoute("/services/:id");
@@ -22,8 +25,10 @@ export default function ServiceDetails() {
   const { toast } = useToast();
 
   const [date, setDate] = useState<Date | undefined>(new Date());
+  const [hours, setHours] = useState(1);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [step, setStep] = useState<"date" | "payment" | "success">("date");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   if (isLoading) {
     return (
@@ -42,22 +47,30 @@ export default function ServiceDetails() {
     }
     if (!date) return;
     
-    // Simulate payment process
-    setStep("payment");
-    setTimeout(async () => {
-      try {
-        await createBooking({
-          serviceId: service.id,
-          customerId: user.id, // In a real app backend gets this from session
-          date: date,
-          status: "pending",
-        });
-        setStep("success");
-      } catch (error) {
-        // Error handled in hook
-        setStep("date");
+    setIsProcessing(true);
+    try {
+      // Create checkout session with Stripe
+      const response = await apiRequest("POST", "/api/checkout", {
+        serviceId: service.id,
+        hours,
+      });
+      const data = await response.json();
+      
+      if (data.url) {
+        // Redirect to Stripe checkout
+        window.location.href = data.url;
+      } else {
+        throw new Error("No checkout URL received");
       }
-    }, 1500);
+    } catch (error) {
+      console.error("Checkout error:", error);
+      toast({ 
+        title: "Payment Error", 
+        description: "Could not start checkout. Please try again.", 
+        variant: "destructive" 
+      });
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -196,14 +209,36 @@ export default function ServiceDetails() {
                      </DialogHeader>
                      
                      {step === 'date' && (
-                       <div className="flex justify-center py-4">
-                         <Calendar
-                           mode="single"
-                           selected={date}
-                           onSelect={setDate}
-                           className="rounded-md border shadow-sm"
-                           disabled={(date) => date < new Date()}
-                         />
+                       <div className="space-y-4 py-4">
+                         <div className="flex justify-center">
+                           <Calendar
+                             mode="single"
+                             selected={date}
+                             onSelect={setDate}
+                             className="rounded-md border shadow-sm"
+                             disabled={(date) => date < new Date()}
+                           />
+                         </div>
+                         <div className="space-y-2 px-4">
+                           <Label htmlFor="hours">Number of Hours</Label>
+                           <Input 
+                             id="hours"
+                             type="number" 
+                             min={1} 
+                             max={8} 
+                             value={hours} 
+                             onChange={(e) => setHours(Math.max(1, parseInt(e.target.value) || 1))}
+                             className="border-red-300 focus:border-red-500"
+                           />
+                           <div className="flex justify-between text-sm pt-2 border-t mt-4">
+                             <span className="text-muted-foreground">Service Cost:</span>
+                             <span className="font-bold">${service.price} x {hours} hr = ${service.price * hours}</span>
+                           </div>
+                           <div className="flex justify-between text-xs text-muted-foreground">
+                             <span>Platform fee (15%):</span>
+                             <span>${(service.price * hours * 0.15).toFixed(2)}</span>
+                           </div>
+                         </div>
                        </div>
                      )}
 
@@ -228,8 +263,18 @@ export default function ServiceDetails() {
 
                      <DialogFooter>
                        {step === 'date' && (
-                         <Button onClick={handleBook} className="w-full" disabled={!date}>
-                           Proceed to Payment ($20 Deposit)
+                         <Button onClick={handleBook} className="w-full gap-2" disabled={!date || isProcessing}>
+                           {isProcessing ? (
+                             <>
+                               <Loader2 className="w-4 h-4 animate-spin" />
+                               Processing...
+                             </>
+                           ) : (
+                             <>
+                               <CreditCard className="w-4 h-4" />
+                               Pay ${service.price * hours} with Stripe
+                             </>
+                           )}
                          </Button>
                        )}
                        {step === 'success' && (

@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, services, bookings, reviews, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview } from "@shared/schema";
-import { eq, ilike, or } from "drizzle-orm";
+import { users, services, bookings, reviews, transactions, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction } from "@shared/schema";
+import { eq, ilike, or, sql, desc } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -20,6 +20,15 @@ export interface IStorage {
   // Reviews
   createReview(review: InsertReview): Promise<Review>;
   getReviews(serviceId: number): Promise<Review[]>;
+
+  // Transactions
+  createTransaction(transaction: InsertTransaction): Promise<Transaction>;
+  getTransaction(id: number): Promise<Transaction | undefined>;
+  getTransactionByCheckoutSession(sessionId: string): Promise<Transaction | undefined>;
+  updateTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<Transaction>;
+  getPlatformEarnings(): Promise<{ totalEarnings: number; totalTransactions: number; recentTransactions: Transaction[] }>;
+  getProviderEarnings(providerId: number): Promise<{ totalEarnings: number; transactions: Transaction[] }>;
+  updateBookingDepositPaid(bookingId: number): Promise<Booking>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -122,6 +131,62 @@ export class DatabaseStorage implements IStorage {
 
   async getReviews(serviceId: number): Promise<Review[]> {
     return await db.select().from(reviews).where(eq(reviews.serviceId, serviceId));
+  }
+
+  // Transaction methods
+  async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    const [newTransaction] = await db.insert(transactions).values(transaction).returning();
+    return newTransaction;
+  }
+
+  async getTransaction(id: number): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.id, id));
+    return transaction;
+  }
+
+  async getTransactionByCheckoutSession(sessionId: string): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.stripeCheckoutSessionId, sessionId));
+    return transaction;
+  }
+
+  async updateTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<Transaction> {
+    const updateData: any = { status };
+    if (paymentIntentId) {
+      updateData.stripePaymentIntentId = paymentIntentId;
+    }
+    const [updated] = await db.update(transactions).set(updateData).where(eq(transactions.id, id)).returning();
+    return updated;
+  }
+
+  async getPlatformEarnings(): Promise<{ totalEarnings: number; totalTransactions: number; recentTransactions: Transaction[] }> {
+    const completedTransactions = await db.select().from(transactions).where(eq(transactions.status, 'completed')).orderBy(desc(transactions.createdAt));
+    
+    const totalEarnings = completedTransactions.reduce((acc, t) => acc + t.platformFee, 0);
+    
+    return {
+      totalEarnings,
+      totalTransactions: completedTransactions.length,
+      recentTransactions: completedTransactions.slice(0, 20),
+    };
+  }
+
+  async getProviderEarnings(providerId: number): Promise<{ totalEarnings: number; transactions: Transaction[] }> {
+    const providerTransactions = await db.select().from(transactions)
+      .where(eq(transactions.providerId, providerId))
+      .orderBy(desc(transactions.createdAt));
+    
+    const completedTransactions = providerTransactions.filter(t => t.status === 'completed');
+    const totalEarnings = completedTransactions.reduce((acc, t) => acc + t.providerPayout, 0);
+    
+    return {
+      totalEarnings,
+      transactions: providerTransactions,
+    };
+  }
+
+  async updateBookingDepositPaid(bookingId: number): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({ depositPaid: true }).where(eq(bookings.id, bookingId)).returning();
+    return updated;
   }
 }
 
