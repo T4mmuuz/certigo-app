@@ -313,6 +313,37 @@ export async function registerRoutes(
             session.payment_intent as string
           );
           await storage.updateBookingDepositPaid(transaction.bookingId);
+          
+          // Get service and booking details
+          const service = await storage.getService(transaction.serviceId);
+          const booking = await storage.getBooking(transaction.bookingId);
+          
+          // Only update booking status to accepted if it's currently pending
+          // This prevents overwriting completed/cancelled bookings
+          if (booking && booking.status === "pending") {
+            await storage.updateBookingStatus(transaction.bookingId, "accepted");
+          }
+          
+          if (service && booking) {
+            const customer = await storage.getUser(booking.customerId);
+            const customerName = customer?.name || "A customer";
+            const formattedDate = new Date(booking.date).toLocaleDateString();
+            
+            // Send payment received notification to provider
+            // Keep amount in cents for consistency with transaction schema
+            await storage.createNotification({
+              userId: service.providerId,
+              type: "payment_received",
+              title: "Payment Received!",
+              body: `${customerName} has paid for ${service.title} on ${formattedDate}. You can start the job!`,
+              metadata: JSON.stringify({
+                bookingId: transaction.bookingId,
+                serviceId: transaction.serviceId,
+                customerId: booking.customerId,
+                amountCents: transaction.amount
+              }),
+            });
+          }
         }
         
         res.json({ success: true, status: 'paid' });

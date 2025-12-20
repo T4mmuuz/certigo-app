@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useBookings } from "@/hooks/use-bookings";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,18 +9,39 @@ import { Calendar, Clock, MapPin, Loader2, MessageSquare } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Bookings() {
   const { data: bookings, isLoading } = useBookings();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [loadingChatBookingId, setLoadingChatBookingId] = useState<number | null>(null);
 
   const startChatMutation = useMutation({
     mutationFn: async (bookingId: number) => {
+      setLoadingChatBookingId(bookingId);
       const response = await apiRequest("POST", `/api/bookings/${bookingId}/chat`, {});
       return response.json();
     },
     onSuccess: (conversation) => {
-      setLocation(`/chat/${conversation.id}`);
+      setLoadingChatBookingId(null);
+      if (conversation?.id) {
+        setLocation(`/chat/${conversation.id}`);
+      } else {
+        toast({
+          title: "Unable to open chat",
+          description: "Could not create conversation. Please try again.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      setLoadingChatBookingId(null);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start chat. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -64,68 +86,75 @@ export default function Bookings() {
           </div>
         ) : (
           <div className="grid gap-4">
-            {bookings.map((booking) => (
-              <Card key={booking.id} className="overflow-hidden hover:shadow-md transition-shadow" data-testid={`booking-card-${booking.id}`}>
-                <CardContent className="p-0 flex flex-col sm:flex-row">
-                  <div className={`w-full h-1 sm:w-2 sm:h-auto ${getStatusBgClass(booking.status)}`} />
-                  
-                  <div className="p-6 flex-1">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                       <div>
-                         <h3 className="text-lg font-bold">{booking.service.title}</h3>
-                         <p className="text-sm text-muted-foreground">Booking #{booking.id}</p>
-                       </div>
-                       <div className="flex items-center gap-2 flex-wrap">
-                         <Badge className={`${getStatusColor(booking.status)} border-none capitalize`}>
-                           {booking.status.replace('_', ' ')}
-                         </Badge>
-                         {booking.paymentMethod === 'cash' && (
-                           <Badge variant="outline" className="text-xs">
-                             Cash Payment
-                           </Badge>
-                         )}
-                       </div>
-                    </div>
+            {bookings.map((booking) => {
+              const isChatLoading = loadingChatBookingId === booking.id;
+              return (
+                <Card key={booking.id} className="overflow-hidden hover:shadow-md transition-shadow" data-testid={`booking-card-${booking.id}`}>
+                  <CardContent className="p-0 flex flex-col sm:flex-row">
+                    <div className={`w-full h-1 sm:w-2 sm:h-auto ${getStatusBgClass(booking.status)}`} />
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Calendar className="w-4 h-4 text-primary" />
-                        <span className="font-medium text-foreground">{format(new Date(booking.date), 'MMMM d, yyyy')}</span>
+                    <div className="p-6 flex-1">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                         <div>
+                           <h3 className="text-lg font-bold">{booking.service.title}</h3>
+                           <p className="text-sm text-muted-foreground">Booking #{booking.id}</p>
+                         </div>
+                         <div className="flex items-center gap-2 flex-wrap">
+                           <Badge className={`${getStatusColor(booking.status)} border-none capitalize`}>
+                             {booking.status.replace('_', ' ')}
+                           </Badge>
+                           {booking.paymentMethod === 'cash' && (
+                             <Badge variant="outline" className="text-xs">
+                               Cash Payment
+                             </Badge>
+                           )}
+                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Clock className="w-4 h-4 text-primary" />
-                        <span className="font-medium text-foreground">{format(new Date(booking.date), 'h:mm a')}</span>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Calendar className="w-4 h-4 text-primary" />
+                          <span className="font-medium text-foreground">{format(new Date(booking.date), 'MMMM d, yyyy')}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Clock className="w-4 h-4 text-primary" />
+                          <span className="font-medium text-foreground">{format(new Date(booking.date), 'h:mm a')}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <MapPin className="w-4 h-4 text-primary" />
+                          <span>Service Location</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <MapPin className="w-4 h-4 text-primary" />
-                        <span>Service Location</span>
-                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => startChatMutation.mutate(booking.id)}
+                        disabled={isChatLoading || startChatMutation.isPending}
+                        data-testid={`button-chat-${booking.id}`}
+                      >
+                        {isChatLoading ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                        )}
+                        {isChatLoading ? "Opening..." : "Chat"}
+                      </Button>
                     </div>
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => startChatMutation.mutate(booking.id)}
-                      disabled={startChatMutation.isPending}
-                      data-testid={`button-chat-${booking.id}`}
-                    >
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      {startChatMutation.isPending ? "Opening..." : "Chat"}
-                    </Button>
-                  </div>
-
-                  <div className="bg-secondary/20 p-6 flex flex-col justify-center items-end min-w-[150px] border-t sm:border-t-0 sm:border-l">
-                    <span className="text-xs text-muted-foreground uppercase font-bold">Total</span>
-                    <span className="text-2xl font-bold text-primary">${booking.service.price}</span>
-                    {booking.depositPaid && (
-                      <span className="text-xs text-green-600 dark:text-green-400 font-medium mt-1 flex items-center">
-                        Deposit Paid
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <div className="bg-secondary/20 p-6 flex flex-col justify-center items-end min-w-[150px] border-t sm:border-t-0 sm:border-l">
+                      <span className="text-xs text-muted-foreground uppercase font-bold">Total</span>
+                      <span className="text-2xl font-bold text-primary">${booking.service.price}</span>
+                      {booking.depositPaid && (
+                        <span className="text-xs text-green-600 dark:text-green-400 font-medium mt-1 flex items-center">
+                          Deposit Paid
+                        </span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </main>
