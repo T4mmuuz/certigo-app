@@ -18,6 +18,8 @@ export const users = pgTable("users", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   referralCode: text("referral_code").unique(),
   referredBy: integer("referred_by"),
+  stripeConnectAccountId: text("stripe_connect_account_id"),
+  referralBalance: integer("referral_balance").default(0).notNull(), // Available balance in cents
 });
 
 export const services = pgTable("services", {
@@ -237,6 +239,25 @@ export const referralsRelations = relations(referrals, ({ one }) => ({
   }),
 }));
 
+// Payouts tracking
+export const payouts = pgTable("payouts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: integer("amount").notNull(), // Amount in cents
+  status: text("status", { enum: ["pending", "processing", "completed", "failed"] }).default("pending").notNull(),
+  stripeTransferId: text("stripe_transfer_id"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const payoutsRelations = relations(payouts, ({ one }) => ({
+  user: one(users, {
+    fields: [payouts.userId],
+    references: [users.id],
+  }),
+}));
+
 // Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
@@ -248,6 +269,7 @@ export const insertConversationSchema = createInsertSchema(conversations).omit({
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, readAt: true });
 export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true });
 export const insertReferralSchema = createInsertSchema(referrals).omit({ id: true, createdAt: true, completedAt: true, rewardedAt: true });
+export const insertPayoutSchema = createInsertSchema(payouts).omit({ id: true, createdAt: true, completedAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -270,3 +292,5 @@ export type ServicePackage = typeof servicePackages.$inferSelect;
 export type InsertServicePackage = z.infer<typeof insertServicePackageSchema>;
 export type Referral = typeof referrals.$inferSelect;
 export type InsertReferral = z.infer<typeof insertReferralSchema>;
+export type Payout = typeof payouts.$inferSelect;
+export type InsertPayout = z.infer<typeof insertPayoutSchema>;
