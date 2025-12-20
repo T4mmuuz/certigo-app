@@ -34,8 +34,8 @@ export default function Home() {
       <main className="flex-1 flex flex-col md:flex-row h-[calc(100vh-64px)] overflow-hidden relative">
         
         {/* Sidebar List - Mobile: Bottom sheet or hidden, Desktop: Left sidebar */}
-        <aside className="w-full md:w-[400px] lg:w-[450px] flex flex-col bg-white border-r z-10 shadow-xl md:shadow-none h-1/2 md:h-full order-2 md:order-1">
-          <div className="p-4 border-b space-y-4 bg-white/50 backdrop-blur-sm sticky top-0 z-10">
+        <aside className="w-full md:w-[400px] lg:w-[450px] flex flex-col bg-white dark:bg-card border-r z-10 shadow-xl md:shadow-none h-1/2 md:h-full order-2 md:order-1">
+          <div className="p-4 border-b space-y-4 bg-white/50 dark:bg-card/50 backdrop-blur-sm sticky top-0 z-10">
             <div>
               <h1 className="text-xl font-display font-bold text-foreground">Find Professionals</h1>
               <p className="text-sm text-muted-foreground">Experts nearby ready to help.</p>

@@ -186,15 +186,15 @@ export default function Profile() {
             <div className="space-y-4">
               <h2 className="text-2xl font-display font-bold">Account Overview</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-none">
+                <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-none">
                   <h3 className="font-bold text-lg text-primary mb-1">Total Spent</h3>
-                  <p className="text-3xl font-display font-bold">$0.00</p>
+                  <p className="text-3xl font-display font-bold text-foreground">$0.00</p>
                   <p className="text-xs text-muted-foreground mt-2">Lifetime spending on services</p>
                 </Card>
-                <Card className="p-6 bg-gradient-to-br from-amber-50 to-orange-50 border-none">
-                  <h3 className="font-bold text-lg text-amber-600 mb-1">Reviews Given</h3>
-                  <p className="text-3xl font-display font-bold text-amber-900">0</p>
-                  <p className="text-xs text-amber-800/60 mt-2">Help the community by reviewing</p>
+                <Card className="p-6 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30 border-none">
+                  <h3 className="font-bold text-lg text-amber-600 dark:text-amber-400 mb-1">Reviews Given</h3>
+                  <p className="text-3xl font-display font-bold text-amber-900 dark:text-amber-300">0</p>
+                  <p className="text-xs text-amber-800/60 dark:text-amber-400/60 mt-2">Help the community by reviewing</p>
                 </Card>
               </div>
             </div>

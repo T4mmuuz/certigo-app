@@ -6,7 +6,7 @@ import { XCircle, Home, ArrowLeft } from "lucide-react";
 
 export default function PaymentCancel() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-red-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50 to-red-50 dark:from-black dark:via-black dark:to-gray-950">
       <Navbar />
 
       <main className="container mx-auto px-4 py-16 flex items-center justify-center">

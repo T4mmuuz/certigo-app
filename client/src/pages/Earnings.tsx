@@ -40,7 +40,7 @@ export default function Earnings() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background dark:bg-background">
       <Navbar />
 
       <main className="container mx-auto px-4 py-8 max-w-6xl">
@@ -56,7 +56,7 @@ export default function Earnings() {
         ) : (
           <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="bg-gradient-to-br from-green-500 to-emerald-600 text-white border-none shadow-lg">
+              <Card className="bg-gradient-to-br from-green-500 to-emerald-600 dark:from-green-700 dark:to-emerald-800 text-white border-none shadow-lg">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg font-medium text-green-100 flex items-center gap-2">
                     <DollarSign className="w-5 h-5" />
@@ -69,7 +69,7 @@ export default function Earnings() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-none shadow-lg">
+              <Card className="bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-700 dark:to-indigo-800 text-white border-none shadow-lg">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg font-medium text-blue-100 flex items-center gap-2">
                     <CreditCard className="w-5 h-5" />
@@ -82,7 +82,7 @@ export default function Earnings() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-purple-500 to-pink-600 text-white border-none shadow-lg">
+              <Card className="bg-gradient-to-br from-purple-500 to-pink-600 dark:from-purple-700 dark:to-pink-800 text-white border-none shadow-lg">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg font-medium text-purple-100 flex items-center gap-2">
                     <Wallet className="w-5 h-5" />

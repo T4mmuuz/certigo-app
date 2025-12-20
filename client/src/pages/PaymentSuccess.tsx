@@ -39,7 +39,7 @@ export default function PaymentSuccess() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50 to-emerald-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50 to-emerald-50 dark:from-black dark:via-black dark:to-gray-950">
       <Navbar />
 
       <main className="container mx-auto px-4 py-16 flex items-center justify-center">

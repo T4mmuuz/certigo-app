@@ -57,7 +57,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-red-50 to-pink-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-red-50 to-pink-50 dark:from-black dark:via-black dark:to-gray-950 flex items-center justify-center p-4">
       {/* Decorative Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-red-200/10 rounded-full blur-3xl" />
@@ -71,7 +71,7 @@ export default function AuthPage() {
           <p className="text-muted-foreground mt-2">Find trusted local experts in minutes.</p>
         </div>
 
-        <Card className="border-border/60 shadow-xl overflow-hidden backdrop-blur-sm bg-white/80">
+        <Card className="border-border/60 shadow-xl overflow-hidden backdrop-blur-sm bg-white/80 dark:bg-card/90">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
             <div className="p-1 mx-6 mt-6 bg-secondary rounded-lg">
               <TabsList className="w-full grid grid-cols-2 bg-transparent p-0">
