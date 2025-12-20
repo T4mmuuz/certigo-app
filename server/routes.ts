@@ -10,6 +10,7 @@ import { insertUserSchema, users } from "@shared/schema";
 import pgSession from "connect-pg-simple";
 import { pool } from "./db";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
 
 const PLATFORM_COMMISSION_RATE = 0.15; // 15% commission
 const PREMIUM_PRICE_CENTS = 2700; // $27/month premium subscription
@@ -58,9 +59,34 @@ export async function registerRoutes(
   app.post(api.auth.register.path, async (req, res) => {
     try {
       const input = api.auth.register.input.parse(req.body);
+      const { referralCode } = req.body;
       const existing = await storage.getUserByUsername(input.username);
       if (existing) return res.status(400).json({ message: "Username already exists" });
-      const user = await storage.createUser(input);
+      
+      // Check if referral code is valid
+      let referrerId: number | undefined;
+      if (referralCode) {
+        const referrer = await storage.getUserByReferralCode(referralCode);
+        if (referrer) {
+          referrerId = referrer.id;
+        }
+      }
+      
+      const user = await storage.createUser({
+        ...input,
+        referredBy: referrerId,
+      });
+      
+      // Create referral record if valid referrer
+      if (referrerId) {
+        await storage.createReferral({
+          referrerId,
+          referredId: user.id,
+          status: "pending",
+          rewardAmount: 500, // $5 reward
+        });
+      }
+      
       req.login(user, (err) => {
         if (err) return res.status(500).json({ message: "Login failed after registration" });
         res.status(201).json(user);
@@ -69,6 +95,7 @@ export async function registerRoutes(
       if (err instanceof z.ZodError) {
         res.status(400).json({ message: err.errors[0].message });
       } else {
+        console.error("Registration error:", err);
         res.status(500).json({ message: "Internal Server Error" });
       }
     }
@@ -89,6 +116,144 @@ export async function registerRoutes(
       res.json(req.user);
     } else {
       res.status(401).send();
+    }
+  });
+
+  // Register object storage routes
+  registerObjectStorageRoutes(app);
+  const objectStorageService = new ObjectStorageService();
+
+  // Profile picture update
+  app.patch("/api/users/profile-picture", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const { objectPath } = req.body;
+      if (!objectPath) return res.status(400).json({ message: "objectPath is required" });
+      
+      // Set ACL policy for the uploaded image to be public
+      const normalizedPath = await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+        owner: String((req.user as any).id),
+        visibility: "public",
+      });
+      
+      // Update user profile picture
+      const updatedUser = await storage.updateUserProfilePicture((req.user as any).id, normalizedPath);
+      res.json(updatedUser);
+    } catch (err) {
+      console.error("Profile picture update error:", err);
+      res.status(500).json({ message: "Failed to update profile picture" });
+    }
+  });
+
+  // Generate referral code for user
+  app.post("/api/users/generate-referral-code", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const user = req.user as any;
+      if (user.referralCode) {
+        return res.json({ referralCode: user.referralCode });
+      }
+      const code = `CERTI${user.id}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const updatedUser = await storage.updateUserReferralCode(user.id, code);
+      res.json({ referralCode: updatedUser.referralCode });
+    } catch (err) {
+      console.error("Generate referral code error:", err);
+      res.status(500).json({ message: "Failed to generate referral code" });
+    }
+  });
+
+  // Get referral stats
+  app.get("/api/users/referral-stats", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const userId = (req.user as any).id;
+      const referrals = await storage.getReferralsByReferrer(userId);
+      const completed = referrals.filter(r => r.status === "completed" || r.status === "rewarded");
+      const totalRewards = referrals
+        .filter(r => r.status === "rewarded")
+        .reduce((sum, r) => sum + r.rewardAmount, 0);
+      res.json({
+        totalReferrals: referrals.length,
+        completedReferrals: completed.length,
+        pendingReferrals: referrals.filter(r => r.status === "pending").length,
+        totalRewardsEarned: totalRewards,
+      });
+    } catch (err) {
+      console.error("Get referral stats error:", err);
+      res.status(500).json({ message: "Failed to get referral stats" });
+    }
+  });
+
+  // Service Packages Routes
+  app.get("/api/service-packages", async (req, res) => {
+    const providerId = typeof req.query.providerId === 'string' ? parseInt(req.query.providerId) : undefined;
+    if (!providerId) return res.status(400).json({ message: "providerId required" });
+    const packages = await storage.getServicePackagesByProvider(providerId);
+    res.json(packages);
+  });
+
+  app.post("/api/service-packages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== "provider") return res.status(403).json({ message: "Only providers can create packages" });
+    try {
+      const { title, description, serviceIds, totalPrice } = req.body;
+      if (!title || !description || !serviceIds || !totalPrice) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      // Parse service IDs and validate provider owns all services
+      let serviceIdArray: number[];
+      try {
+        serviceIdArray = JSON.parse(serviceIds);
+        if (!Array.isArray(serviceIdArray) || serviceIdArray.length === 0) {
+          return res.status(400).json({ message: "serviceIds must be a non-empty array" });
+        }
+      } catch {
+        return res.status(400).json({ message: "Invalid serviceIds format" });
+      }
+      
+      // Verify provider owns all services and calculate original price
+      let originalPrice = 0;
+      for (const id of serviceIdArray) {
+        const service = await storage.getService(id);
+        if (!service) {
+          return res.status(400).json({ message: `Service ${id} not found` });
+        }
+        if (service.providerId !== user.id) {
+          return res.status(403).json({ message: "You can only bundle your own services" });
+        }
+        originalPrice += service.price * 100; // Convert to cents
+      }
+      
+      const pkg = await storage.createServicePackage({
+        providerId: user.id,
+        title,
+        description,
+        serviceIds,
+        totalPrice: parseInt(totalPrice),
+        originalPrice,
+        isActive: true,
+      });
+      res.status(201).json(pkg);
+    } catch (err) {
+      console.error("Create package error:", err);
+      res.status(500).json({ message: "Failed to create package" });
+    }
+  });
+
+  app.delete("/api/service-packages/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const pkg = await storage.getServicePackage(parseInt(req.params.id));
+      if (!pkg) return res.status(404).json({ message: "Package not found" });
+      if (pkg.providerId !== (req.user as any).id) {
+        return res.status(403).json({ message: "You can only delete your own packages" });
+      }
+      await storage.deleteServicePackage(parseInt(req.params.id));
+      res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete package" });
     }
   });
 
@@ -122,9 +287,11 @@ export async function registerRoutes(
   app.post(api.bookings.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     try {
+      const user = req.user as any;
       const input = api.bookings.create.input.parse({
         ...req.body,
-        date: new Date(req.body.date) // Ensure date is Date object
+        customerId: user.id, // Always use authenticated user's ID
+        date: new Date(req.body.date)
       });
       const booking = await storage.createBooking(input);
       
@@ -569,6 +736,71 @@ export async function registerRoutes(
     } catch (err) {
       console.error('Customer no-show error:', err);
       res.status(500).json({ message: "Failed to process no-show report" });
+    }
+  });
+
+  // Mark booking as completed (provider action)
+  app.post("/api/bookings/:id/complete", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) {
+        return res.status(403).json({ message: "Only the provider can mark booking as complete" });
+      }
+      
+      if (booking.status !== "accepted") {
+        return res.status(400).json({ message: "Only accepted bookings can be marked as complete" });
+      }
+      
+      await storage.updateBookingStatus(bookingId, "completed");
+      
+      // Check if this is the customer's first completed booking and process referral
+      const customer = await storage.getUser(booking.customerId);
+      if (customer && customer.referredBy) {
+        // Check if customer has a pending referral
+        const referrer = await storage.getUserByReferralCode(customer.referredBy);
+        if (referrer) {
+          const referrals = await storage.getReferralsByReferrer(referrer.id);
+          const pendingReferral = referrals.find(
+            r => r.referredId === booking.customerId && r.status === "pending"
+          );
+          
+          if (pendingReferral) {
+            // Mark referral as completed and award bonus
+            await storage.updateReferralStatus(pendingReferral.id, "rewarded");
+            
+            // Notify referrer of reward
+            await storage.createNotification({
+              userId: referrer.id,
+              type: "referral_reward",
+              title: "Referral Reward Earned!",
+              body: `You earned $5.00 for referring ${customer.name}! They completed their first booking.`,
+              metadata: JSON.stringify({ referralId: pendingReferral.id, amount: 500 }),
+            });
+          }
+        }
+      }
+      
+      // Notify customer
+      await storage.createNotification({
+        userId: booking.customerId,
+        type: "booking_completed",
+        title: "Service Completed",
+        body: `Your booking for ${service.title} has been marked as completed. Please leave a review!`,
+        metadata: JSON.stringify({ bookingId: booking.id, serviceId: service.id }),
+      });
+      
+      res.json({ success: true, message: "Booking marked as completed" });
+    } catch (err) {
+      console.error('Complete booking error:', err);
+      res.status(500).json({ message: "Failed to complete booking" });
     }
   });
 

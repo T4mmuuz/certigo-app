@@ -4,6 +4,31 @@
 
 CertiGo is a local service marketplace application that connects customers with certified professionals (plumbers, electricians, welders, etc.). The platform enables service discovery via interactive maps, booking appointments, processing payments through Stripe, and leaving reviews. It features a 15% platform commission model on all transactions.
 
+## Recent Changes (December 2024)
+
+### Profile Picture Upload
+- Added custom profile picture upload using Replit Object Storage
+- Users can upload images up to 5MB that are publicly accessible
+- Uses presigned URL flow for direct uploads to Google Cloud Storage
+
+### Referral Program
+- Users can generate unique referral codes (format: CERTI{userId}{randomChars})
+- $5 reward for each referred user who completes a booking
+- Referral stats displayed on profile page (total referrals, earnings)
+
+### Service Packages
+- Providers can create bundled service packages at discounted rates
+- Packages include multiple services with combined pricing
+- API endpoints: GET/POST /api/service-packages
+
+### Repeat Booking
+- "Book Again" button on completed bookings for quick rebooking
+- Automatically schedules for next day at 10 AM with same service
+
+### Cancel Booking with Refund Policy
+- Customers can cancel pending/accepted bookings (no refund)
+- Provider cancellations result in full customer refund
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

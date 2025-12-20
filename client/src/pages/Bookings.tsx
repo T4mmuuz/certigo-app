@@ -17,7 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
-import { Calendar, Clock, MapPin, Loader2, MessageSquare, X, AlertTriangle } from "lucide-react";
+import { Calendar, Clock, MapPin, Loader2, MessageSquare, X, AlertTriangle, RotateCcw } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -30,6 +30,7 @@ export default function Bookings() {
   const { toast } = useToast();
   const [loadingChatBookingId, setLoadingChatBookingId] = useState<number | null>(null);
   const [cancellingBookingId, setCancellingBookingId] = useState<number | null>(null);
+  const [rebookingId, setRebookingId] = useState<number | null>(null);
 
   const startChatMutation = useMutation({
     mutationFn: async (bookingId: number) => {
@@ -86,6 +87,40 @@ export default function Bookings() {
     },
   });
 
+  const rebookMutation = useMutation({
+    mutationFn: async ({ serviceId, hours }: { serviceId: number; hours: number }) => {
+      setRebookingId(serviceId);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(10, 0, 0, 0);
+      
+      const response = await apiRequest("POST", "/api/bookings", {
+        serviceId,
+        date: tomorrow.toISOString(),
+        paymentMethod: "app",
+        hours,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      setRebookingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({
+        title: "Booking Created",
+        description: "Your repeat booking has been scheduled for tomorrow at 10 AM.",
+      });
+    },
+    onError: (error: Error) => {
+      setRebookingId(null);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create booking. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const getStatusColor = (status: string) => {
     switch(status) {
       case 'accepted': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40';
@@ -136,7 +171,9 @@ export default function Bookings() {
             {bookings.map((booking) => {
               const isChatLoading = loadingChatBookingId === booking.id;
               const isCancelling = cancellingBookingId === booking.id;
+              const isRebooking = rebookingId === booking.serviceId;
               const showCancelButton = canCancel(booking.status);
+              const showRebookButton = booking.status === 'completed' && user?.role === 'customer';
               
               return (
                 <Card key={booking.id} className="overflow-hidden hover:shadow-md transition-shadow" data-testid={`booking-card-${booking.id}`}>
@@ -192,13 +229,30 @@ export default function Bookings() {
                           {isChatLoading ? "Opening..." : "Chat"}
                         </Button>
 
+                        {showRebookButton && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => rebookMutation.mutate({ serviceId: booking.serviceId, hours: booking.hours })}
+                            disabled={isRebooking || rebookMutation.isPending}
+                            data-testid={`button-rebook-${booking.id}`}
+                          >
+                            {isRebooking ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-4 h-4 mr-2" />
+                            )}
+                            {isRebooking ? "Booking..." : "Book Again"}
+                          </Button>
+                        )}
+
                         {showCancelButton && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                                className="text-destructive border-destructive/50"
                                 disabled={isCancelling}
                                 data-testid={`button-cancel-${booking.id}`}
                               >

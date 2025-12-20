@@ -10,11 +10,14 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   role: text("role", { enum: ["customer", "provider"] }).default("customer").notNull(),
   bio: text("bio"),
+  profilePicture: text("profile_picture"),
   lat: real("lat"),
   lng: real("lng"),
   isPremium: boolean("is_premium").default(false).notNull(),
   premiumExpiresAt: timestamp("premium_expires_at"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  referralCode: text("referral_code").unique(),
+  referredBy: integer("referred_by"),
 });
 
 export const services = pgTable("services", {
@@ -191,6 +194,49 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   }),
 }));
 
+// Service packages (bundles of services at discounted rates)
+export const servicePackages = pgTable("service_packages", {
+  id: serial("id").primaryKey(),
+  providerId: integer("provider_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  serviceIds: text("service_ids").notNull(), // JSON array of service IDs
+  totalPrice: integer("total_price").notNull(), // Discounted bundle price in cents
+  originalPrice: integer("original_price").notNull(), // Sum of individual prices
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const servicePackagesRelations = relations(servicePackages, ({ one }) => ({
+  provider: one(users, {
+    fields: [servicePackages.providerId],
+    references: [users.id],
+  }),
+}));
+
+// Referrals tracking
+export const referrals = pgTable("referrals", {
+  id: serial("id").primaryKey(),
+  referrerId: integer("referrer_id").notNull(),
+  referredId: integer("referred_id").notNull(),
+  status: text("status", { enum: ["pending", "completed", "rewarded"] }).default("pending").notNull(),
+  rewardAmount: integer("reward_amount").default(500).notNull(), // $5 reward in cents
+  completedAt: timestamp("completed_at"),
+  rewardedAt: timestamp("rewarded_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const referralsRelations = relations(referrals, ({ one }) => ({
+  referrer: one(users, {
+    fields: [referrals.referrerId],
+    references: [users.id],
+  }),
+  referred: one(users, {
+    fields: [referrals.referredId],
+    references: [users.id],
+  }),
+}));
+
 // Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
@@ -200,6 +246,8 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({ i
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, readAt: true });
 export const insertConversationSchema = createInsertSchema(conversations).omit({ id: true, createdAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, readAt: true });
+export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true });
+export const insertReferralSchema = createInsertSchema(referrals).omit({ id: true, createdAt: true, completedAt: true, rewardedAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -218,3 +266,7 @@ export type Conversation = typeof conversations.$inferSelect;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type ServicePackage = typeof servicePackages.$inferSelect;
+export type InsertServicePackage = z.infer<typeof insertServicePackageSchema>;
+export type Referral = typeof referrals.$inferSelect;
+export type InsertReferral = z.infer<typeof insertReferralSchema>;

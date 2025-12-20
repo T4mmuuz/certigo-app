@@ -1,11 +1,12 @@
 import { db } from "./db";
-import { users, services, bookings, reviews, transactions, notifications, conversations, messages, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage } from "@shared/schema";
+import { users, services, bookings, reviews, transactions, notifications, conversations, messages, servicePackages, referrals, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage, type ServicePackage, type InsertServicePackage, type Referral, type InsertReferral } from "@shared/schema";
 import { eq, ilike, or, sql, desc, isNull, and } from "drizzle-orm";
 
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByReferralCode(referralCode: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
   // Services
@@ -58,6 +59,23 @@ export interface IStorage {
   getMessages(conversationId: number): Promise<(Message & { sender: User })[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessagesRead(conversationId: number, userId: number): Promise<void>;
+  
+  // Profile
+  updateUserProfilePicture(userId: number, profilePicture: string): Promise<User>;
+  updateUserReferralCode(userId: number, referralCode: string): Promise<User>;
+  
+  // Referrals
+  createReferral(referral: InsertReferral): Promise<Referral>;
+  getReferralsByReferrer(referrerId: number): Promise<Referral[]>;
+  getReferralByReferred(referredId: number): Promise<Referral | undefined>;
+  updateReferralStatus(id: number, status: string): Promise<Referral>;
+  
+  // Service Packages
+  createServicePackage(pkg: InsertServicePackage): Promise<ServicePackage>;
+  getServicePackagesByProvider(providerId: number): Promise<ServicePackage[]>;
+  getServicePackage(id: number): Promise<ServicePackage | undefined>;
+  updateServicePackage(id: number, data: Partial<InsertServicePackage>): Promise<ServicePackage>;
+  deleteServicePackage(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -68,6 +86,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserByReferralCode(referralCode: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.referralCode, referralCode));
     return user;
   }
 
@@ -384,6 +407,71 @@ export class DatabaseStorage implements IStorage {
         sql`${messages.senderId} != ${userId}`,
         isNull(messages.readAt)
       ));
+  }
+
+  // Profile methods
+  async updateUserProfilePicture(userId: number, profilePicture: string): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ profilePicture })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async updateUserReferralCode(userId: number, referralCode: string): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ referralCode })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  // Referral methods
+  async createReferral(referral: InsertReferral): Promise<Referral> {
+    const [created] = await db.insert(referrals).values(referral).returning();
+    return created;
+  }
+
+  async getReferralsByReferrer(referrerId: number): Promise<Referral[]> {
+    return db.select().from(referrals).where(eq(referrals.referrerId, referrerId));
+  }
+
+  async getReferralByReferred(referredId: number): Promise<Referral | undefined> {
+    const [referral] = await db.select().from(referrals).where(eq(referrals.referredId, referredId));
+    return referral;
+  }
+
+  async updateReferralStatus(id: number, status: string): Promise<Referral> {
+    const updates: any = { status };
+    if (status === "completed") updates.completedAt = new Date();
+    if (status === "rewarded") updates.rewardedAt = new Date();
+    const [updated] = await db.update(referrals).set(updates).where(eq(referrals.id, id)).returning();
+    return updated;
+  }
+
+  // Service Package methods
+  async createServicePackage(pkg: InsertServicePackage): Promise<ServicePackage> {
+    const [created] = await db.insert(servicePackages).values(pkg).returning();
+    return created;
+  }
+
+  async getServicePackagesByProvider(providerId: number): Promise<ServicePackage[]> {
+    return db.select().from(servicePackages)
+      .where(and(eq(servicePackages.providerId, providerId), eq(servicePackages.isActive, true)));
+  }
+
+  async getServicePackage(id: number): Promise<ServicePackage | undefined> {
+    const [pkg] = await db.select().from(servicePackages).where(eq(servicePackages.id, id));
+    return pkg;
+  }
+
+  async updateServicePackage(id: number, data: Partial<InsertServicePackage>): Promise<ServicePackage> {
+    const [updated] = await db.update(servicePackages).set(data).where(eq(servicePackages.id, id)).returning();
+    return updated;
+  }
+
+  async deleteServicePackage(id: number): Promise<void> {
+    await db.update(servicePackages).set({ isActive: false }).where(eq(servicePackages.id, id));
   }
 }
 
