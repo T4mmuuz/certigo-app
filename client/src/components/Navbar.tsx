@@ -10,14 +10,31 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Search, User, LogOut, Briefcase, Calendar, DollarSign, Crown } from "lucide-react";
-import { useState } from "react";
+import { Search, User, LogOut, Briefcase, Calendar, DollarSign, Crown, Moon, Sun } from "lucide-react";
+import { useState, useEffect } from "react";
 import logoImage from "@assets/generated_images/certigo_professional_marketplace_logo.png";
 
 export function Navbar() {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const [search, setSearch] = useState("");
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark' || 
+        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +66,14 @@ export function Navbar() {
 
         {/* Auth Actions */}
         <div className="flex items-center gap-2">
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            onClick={() => setIsDark(!isDark)}
+            data-testid="button-theme-toggle"
+          >
+            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </Button>
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -59,7 +84,7 @@ export function Navbar() {
                   <span className="hidden sm:inline-block font-medium">{user.username}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 rounded-xl p-2">
+              <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 bg-card border shadow-lg">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setLocation("/profile")} className="cursor-pointer rounded-lg">

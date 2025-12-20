@@ -309,18 +309,23 @@ export async function registerRoutes(
     }
   });
 
-  // Get provider earnings
+  // Get provider earnings (shows provider's net payout, not platform commission)
   app.get("/api/provider/earnings", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
-    if ((req.user as any).role !== 'provider') {
-      return res.status(403).json({ message: "Only providers can view their earnings" });
-    }
     
     try {
-      const earnings = await storage.getProviderEarnings((req.user as any).id);
+      const userId = (req.user as any).id;
+      const { totalEarnings, transactions: allTransactions } = await storage.getProviderEarnings(userId);
+      
+      const completedTransactions = allTransactions.filter(t => t.status === "completed");
+      const pendingTransactions = allTransactions.filter(t => t.status === "pending");
+      const pendingPayouts = pendingTransactions.reduce((sum, t) => sum + t.providerPayout, 0);
+      
       res.json({
-        totalEarnings: earnings.totalEarnings / 100, // Convert to dollars
-        transactions: earnings.transactions.map(t => ({
+        totalEarnings: totalEarnings / 100,
+        totalJobs: completedTransactions.length,
+        pendingPayouts: pendingPayouts / 100,
+        recentTransactions: allTransactions.slice(0, 10).map(t => ({
           ...t,
           amount: t.amount / 100,
           platformFee: t.platformFee / 100,
@@ -328,7 +333,7 @@ export async function registerRoutes(
         })),
       });
     } catch (err) {
-      console.error('Error fetching provider earnings:', err);
+      console.error('Provider earnings error:', err);
       res.status(500).json({ message: "Failed to fetch earnings" });
     }
   });
