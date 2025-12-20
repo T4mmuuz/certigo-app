@@ -29,6 +29,13 @@ CertiGo is a local service marketplace application that connects customers with 
 - Customers can cancel pending/accepted bookings (no refund)
 - Provider cancellations result in full customer refund
 
+### Payout System
+- Users can connect bank accounts via Stripe Connect Express onboarding
+- Referral earnings accumulate in user's referralBalance field
+- Minimum $5 payout threshold required for withdrawal
+- Atomic balance deduction prevents race conditions and double-withdrawals
+- API endpoints: POST /api/payouts/connect, GET /api/payouts/connect/status, POST /api/payouts/request
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
