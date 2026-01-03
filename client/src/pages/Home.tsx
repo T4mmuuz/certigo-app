@@ -4,9 +4,20 @@ import { useServices } from "@/hooks/use-services";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, MapPin, Star } from "lucide-react";
+import { Search, MapPin, Star, Megaphone } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+
+type Ad = {
+  id: number;
+  placement: string;
+  title: string;
+  body: string;
+  ctaText: string | null;
+  ctaUrl: string | null;
+  imagePath: string | null;
+};
 
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -37,6 +48,16 @@ export default function Home() {
   const { data: services = [], isLoading } = useServices({ 
     search: searchTerm, 
     category: activeCategory 
+  });
+
+  // Fetch active ads for home feed
+  const { data: homeAds = [] } = useQuery<Ad[]>({
+    queryKey: ["/api/ads", "home_feed"],
+    queryFn: async () => {
+      const res = await fetch("/api/ads?placement=home_feed");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
   // Dynamically extract unique categories from services
@@ -107,42 +128,74 @@ export default function Home() {
                 <p className="text-sm text-muted-foreground mt-1">Try adjusting your search or filters.</p>
               </div>
             ) : (
-              services.map((service) => (
-                <Link key={service.id} href={`/services/${service.id}`} className="block group">
-                  <Card className="overflow-hidden border-border/50 hover:border-primary/30 hover:shadow-md transition-all duration-300 group-hover:-translate-y-0.5 bg-white">
+              <>
+                {/* Show ad at top if available */}
+                {homeAds.length > 0 && (
+                  <Card className="overflow-hidden border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 dark:from-primary/10 dark:to-primary/20">
                     <CardContent className="p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-bold text-foreground group-hover:text-primary transition-colors">{service.title}</h3>
-                          <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{service.description}</p>
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-primary/10 rounded-md">
+                          <Megaphone className="w-4 h-4 text-primary" />
                         </div>
-                        <div className="text-right">
-                          <span className="block font-bold text-primary text-lg">${service.price}</span>
-                          <span className="text-[10px] text-muted-foreground uppercase font-medium">per hour</span>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-[10px] font-bold text-primary">
-                            {service.provider.name.charAt(0)}
-                          </div>
-                          <span className="font-medium">{service.provider.name}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="flex items-center text-amber-500 font-bold bg-amber-50 px-1.5 py-0.5 rounded">
-                            <Star className="w-3 h-3 fill-current mr-1" />
-                            4.8
-                          </span>
-                          <span className="px-2 py-0.5 bg-secondary rounded-full font-medium capitalize">
-                            {service.category}
-                          </span>
+                        <div className="flex-1">
+                          <p className="text-[10px] text-muted-foreground uppercase font-medium mb-1">Sponsored</p>
+                          <h3 className="font-bold text-foreground">{homeAds[0].title}</h3>
+                          <p className="text-sm text-muted-foreground mt-1">{homeAds[0].body}</p>
+                          {homeAds[0].ctaUrl && homeAds[0].ctaText && (
+                            <a 
+                              href={homeAds[0].ctaUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-block mt-2"
+                            >
+                              <Button size="sm" variant="outline" className="text-xs">
+                                {homeAds[0].ctaText}
+                              </Button>
+                            </a>
+                          )}
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-                </Link>
-              ))
+                )}
+                
+                {services.map((service) => (
+                  <Link key={service.id} href={`/services/${service.id}`} className="block group">
+                    <Card className="overflow-hidden border-border/50 hover:border-primary/30 hover:shadow-md transition-all duration-300 group-hover:-translate-y-0.5 bg-white dark:bg-card">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-bold text-foreground group-hover:text-primary transition-colors">{service.title}</h3>
+                            <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{service.description}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="block font-bold text-primary text-lg">${service.price}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase font-medium">per hour</span>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-[10px] font-bold text-primary">
+                              {service.provider.name.charAt(0)}
+                            </div>
+                            <span className="font-medium">{service.provider.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="flex items-center text-amber-500 font-bold bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">
+                              <Star className="w-3 h-3 fill-current mr-1" />
+                              4.8
+                            </span>
+                            <span className="px-2 py-0.5 bg-secondary rounded-full font-medium capitalize">
+                              {service.category}
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </>
             )}
           </div>
         </aside>

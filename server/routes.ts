@@ -1275,5 +1275,100 @@ export async function registerRoutes(
     }
   });
 
+  // ========== ADS ROUTES ==========
+  
+  // Get active ads (public)
+  app.get("/api/ads", async (req, res) => {
+    try {
+      const placement = req.query.placement as string | undefined;
+      const ads = await storage.getActiveAds(placement);
+      res.json(ads);
+    } catch (err) {
+      console.error('Get ads error:', err);
+      res.status(500).json({ message: "Failed to get ads" });
+    }
+  });
+
+  // Note: Admin routes for ads management require a dedicated admin role.
+  // For now, ads are managed directly via database. These routes are disabled
+  // until an admin authentication system is implemented.
+  // The public GET /api/ads endpoint above is available for displaying ads.
+
+  // ========== CUSTOMER FEEDBACK (Vendor reviews of customers) ==========
+  
+  // Provider submits feedback about customer (after booking)
+  app.post("/api/bookings/:id/customer-feedback", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = parseInt(req.params.id);
+      const userId = (req.user as any).id;
+      
+      // Get booking to verify provider
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) {
+        return res.status(403).json({ message: "Only the service provider can leave customer feedback" });
+      }
+      
+      // Check if booking is completed
+      if (booking.status !== "completed" && booking.status !== "customer_noshow") {
+        return res.status(400).json({ message: "Can only leave feedback for completed bookings" });
+      }
+      
+      // Check if feedback already exists
+      const existing = await storage.getCustomerFeedback(bookingId);
+      if (existing) {
+        return res.status(400).json({ message: "Feedback already submitted for this booking" });
+      }
+      
+      const { rating, comment, noShow } = req.body;
+      
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: "Rating must be between 1 and 5" });
+      }
+      
+      const feedback = await storage.createCustomerFeedback({
+        bookingId,
+        providerId: userId,
+        customerId: booking.customerId,
+        rating,
+        comment: comment || null,
+        noShow: noShow || false,
+      });
+      
+      res.status(201).json(feedback);
+    } catch (err) {
+      console.error('Customer feedback error:', err);
+      res.status(500).json({ message: "Failed to submit feedback" });
+    }
+  });
+
+  // Get customer feedback for a booking
+  app.get("/api/bookings/:id/customer-feedback", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const feedback = await storage.getCustomerFeedback(parseInt(req.params.id));
+      res.json(feedback || null);
+    } catch (err) {
+      console.error('Get customer feedback error:', err);
+      res.status(500).json({ message: "Failed to get feedback" });
+    }
+  });
+
+  // Get customer's overall rating
+  app.get("/api/users/:id/customer-rating", async (req, res) => {
+    try {
+      const rating = await storage.getCustomerRating(parseInt(req.params.id));
+      res.json(rating);
+    } catch (err) {
+      console.error('Get customer rating error:', err);
+      res.status(500).json({ message: "Failed to get customer rating" });
+    }
+  });
+
   return httpServer;
 }

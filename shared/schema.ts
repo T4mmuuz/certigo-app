@@ -258,6 +258,48 @@ export const payoutsRelations = relations(payouts, ({ one }) => ({
   }),
 }));
 
+// Ads for monetization
+export const ads = pgTable("ads", {
+  id: serial("id").primaryKey(),
+  placement: text("placement", { enum: ["home_sidebar", "home_feed", "booking_confirmation", "profile"] }).notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  ctaText: text("cta_text"),
+  ctaUrl: text("cta_url"),
+  imagePath: text("image_path"),
+  isActive: boolean("is_active").default(true).notNull(),
+  startsAt: timestamp("starts_at"),
+  endsAt: timestamp("ends_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Customer feedback (vendor reviews of customers)
+export const customerFeedback = pgTable("customer_feedback", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().unique(),
+  providerId: integer("provider_id").notNull(),
+  customerId: integer("customer_id").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment"),
+  noShow: boolean("no_show").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const customerFeedbackRelations = relations(customerFeedback, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [customerFeedback.bookingId],
+    references: [bookings.id],
+  }),
+  provider: one(users, {
+    fields: [customerFeedback.providerId],
+    references: [users.id],
+  }),
+  customer: one(users, {
+    fields: [customerFeedback.customerId],
+    references: [users.id],
+  }),
+}));
+
 // Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
@@ -270,6 +312,8 @@ export const insertMessageSchema = createInsertSchema(messages).omit({ id: true,
 export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true });
 export const insertReferralSchema = createInsertSchema(referrals).omit({ id: true, createdAt: true, completedAt: true, rewardedAt: true });
 export const insertPayoutSchema = createInsertSchema(payouts).omit({ id: true, createdAt: true, completedAt: true });
+export const insertAdSchema = createInsertSchema(ads).omit({ id: true, createdAt: true });
+export const insertCustomerFeedbackSchema = createInsertSchema(customerFeedback).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -294,3 +338,7 @@ export type Referral = typeof referrals.$inferSelect;
 export type InsertReferral = z.infer<typeof insertReferralSchema>;
 export type Payout = typeof payouts.$inferSelect;
 export type InsertPayout = z.infer<typeof insertPayoutSchema>;
+export type Ad = typeof ads.$inferSelect;
+export type InsertAd = z.infer<typeof insertAdSchema>;
+export type CustomerFeedback = typeof customerFeedback.$inferSelect;
+export type InsertCustomerFeedback = z.infer<typeof insertCustomerFeedbackSchema>;

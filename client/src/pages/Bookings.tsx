@@ -16,8 +16,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
-import { Calendar, Clock, MapPin, Loader2, MessageSquare, X, AlertTriangle, RotateCcw } from "lucide-react";
+import { Calendar, Clock, MapPin, Loader2, MessageSquare, X, AlertTriangle, RotateCcw, Star, UserCheck } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -31,6 +43,10 @@ export default function Bookings() {
   const [loadingChatBookingId, setLoadingChatBookingId] = useState<number | null>(null);
   const [cancellingBookingId, setCancellingBookingId] = useState<number | null>(null);
   const [rebookingId, setRebookingId] = useState<number | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState<number | null>(null);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackNoShow, setFeedbackNoShow] = useState(false);
 
   const startChatMutation = useMutation({
     mutationFn: async (bookingId: number) => {
@@ -116,6 +132,34 @@ export default function Bookings() {
       toast({
         title: "Error",
         description: error.message || "Failed to create booking. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const submitFeedbackMutation = useMutation({
+    mutationFn: async ({ bookingId, rating, comment, noShow }: { bookingId: number; rating: number; comment: string; noShow: boolean }) => {
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/customer-feedback`, {
+        rating,
+        comment: comment || null,
+        noShow,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      setFeedbackDialogOpen(null);
+      setFeedbackRating(5);
+      setFeedbackComment("");
+      setFeedbackNoShow(false);
+      toast({
+        title: "Feedback Submitted",
+        description: "Your feedback about the customer has been recorded.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit feedback. Please try again.",
         variant: "destructive",
       });
     },
@@ -244,6 +288,101 @@ export default function Bookings() {
                             )}
                             {isRebooking ? "Booking..." : "Book Again"}
                           </Button>
+                        )}
+
+                        {/* Rate Customer button for providers on completed bookings */}
+                        {isProvider && (booking.status === 'completed' || booking.status === 'customer_noshow') && (
+                          <Dialog open={feedbackDialogOpen === booking.id} onOpenChange={(open) => {
+                            if (open) {
+                              setFeedbackDialogOpen(booking.id);
+                              setFeedbackNoShow(booking.status === 'customer_noshow');
+                            } else {
+                              setFeedbackDialogOpen(null);
+                            }
+                          }}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                data-testid={`button-rate-customer-${booking.id}`}
+                              >
+                                <UserCheck className="w-4 h-4 mr-2" />
+                                Rate Customer
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Rate Customer</DialogTitle>
+                                <DialogDescription>
+                                  Share your experience working with this customer.
+                                </DialogDescription>
+                              </DialogHeader>
+                              
+                              <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                  <Label>Rating</Label>
+                                  <div className="flex gap-1">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <button
+                                        key={star}
+                                        type="button"
+                                        onClick={() => setFeedbackRating(star)}
+                                        className="p-1"
+                                      >
+                                        <Star 
+                                          className={`w-6 h-6 ${star <= feedbackRating ? 'text-amber-500 fill-amber-500' : 'text-muted-foreground'}`}
+                                        />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <Label htmlFor="comment">Comment (optional)</Label>
+                                  <Textarea
+                                    id="comment"
+                                    placeholder="How was your experience with this customer?"
+                                    value={feedbackComment}
+                                    onChange={(e) => setFeedbackComment(e.target.value)}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox 
+                                    id="noshow" 
+                                    checked={feedbackNoShow}
+                                    onCheckedChange={(checked) => setFeedbackNoShow(checked as boolean)}
+                                  />
+                                  <Label htmlFor="noshow" className="text-sm font-normal">
+                                    Customer was not at the location (no-show)
+                                  </Label>
+                                </div>
+                              </div>
+                              
+                              <DialogFooter>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setFeedbackDialogOpen(null)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  onClick={() => submitFeedbackMutation.mutate({
+                                    bookingId: booking.id,
+                                    rating: feedbackRating,
+                                    comment: feedbackComment,
+                                    noShow: feedbackNoShow,
+                                  })}
+                                  disabled={submitFeedbackMutation.isPending}
+                                >
+                                  {submitFeedbackMutation.isPending ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  ) : null}
+                                  Submit Feedback
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
                         )}
 
                         {showCancelButton && (

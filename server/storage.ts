@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, services, bookings, reviews, transactions, notifications, conversations, messages, servicePackages, referrals, payouts, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage, type ServicePackage, type InsertServicePackage, type Referral, type InsertReferral, type Payout, type InsertPayout } from "@shared/schema";
-import { eq, ilike, or, sql, desc, isNull, and } from "drizzle-orm";
+import { users, services, bookings, reviews, transactions, notifications, conversations, messages, servicePackages, referrals, payouts, ads, customerFeedback, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage, type ServicePackage, type InsertServicePackage, type Referral, type InsertReferral, type Payout, type InsertPayout, type Ad, type InsertAd, type CustomerFeedback, type InsertCustomerFeedback } from "@shared/schema";
+import { eq, ilike, or, sql, desc, isNull, and, lte, gte } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -84,6 +84,18 @@ export interface IStorage {
   createPayout(payout: InsertPayout): Promise<Payout>;
   getUserPayouts(userId: number): Promise<Payout[]>;
   updatePayoutStatus(id: number, status: string, transferId?: string, failureReason?: string): Promise<Payout>;
+  
+  // Ads
+  createAd(ad: InsertAd): Promise<Ad>;
+  getActiveAds(placement?: string): Promise<Ad[]>;
+  getAllAds(): Promise<Ad[]>;
+  updateAd(id: number, data: Partial<InsertAd>): Promise<Ad>;
+  deleteAd(id: number): Promise<void>;
+  
+  // Customer Feedback (vendor reviews of customers)
+  createCustomerFeedback(feedback: InsertCustomerFeedback): Promise<CustomerFeedback>;
+  getCustomerFeedback(bookingId: number): Promise<CustomerFeedback | undefined>;
+  getCustomerRating(customerId: number): Promise<{ averageRating: number; totalReviews: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -526,6 +538,65 @@ export class DatabaseStorage implements IStorage {
     if (status === 'completed') updates.completedAt = new Date();
     const [updated] = await db.update(payouts).set(updates).where(eq(payouts.id, id)).returning();
     return updated;
+  }
+
+  // Ads methods
+  async createAd(ad: InsertAd): Promise<Ad> {
+    const [created] = await db.insert(ads).values(ad).returning();
+    return created;
+  }
+
+  async getActiveAds(placement?: string): Promise<Ad[]> {
+    const now = new Date();
+    let query = db.select().from(ads).where(
+      and(
+        eq(ads.isActive, true),
+        or(isNull(ads.startsAt), lte(ads.startsAt, now)),
+        or(isNull(ads.endsAt), gte(ads.endsAt, now))
+      )
+    );
+    
+    const result = await query;
+    if (placement) {
+      return result.filter(ad => ad.placement === placement);
+    }
+    return result;
+  }
+
+  async getAllAds(): Promise<Ad[]> {
+    return db.select().from(ads).orderBy(desc(ads.createdAt));
+  }
+
+  async updateAd(id: number, data: Partial<InsertAd>): Promise<Ad> {
+    const [updated] = await db.update(ads).set(data).where(eq(ads.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAd(id: number): Promise<void> {
+    await db.update(ads).set({ isActive: false }).where(eq(ads.id, id));
+  }
+
+  // Customer Feedback methods
+  async createCustomerFeedback(feedback: InsertCustomerFeedback): Promise<CustomerFeedback> {
+    const [created] = await db.insert(customerFeedback).values(feedback).returning();
+    return created;
+  }
+
+  async getCustomerFeedback(bookingId: number): Promise<CustomerFeedback | undefined> {
+    const [feedback] = await db.select().from(customerFeedback).where(eq(customerFeedback.bookingId, bookingId));
+    return feedback;
+  }
+
+  async getCustomerRating(customerId: number): Promise<{ averageRating: number; totalReviews: number }> {
+    const result = await db.select({
+      avgRating: sql<number>`COALESCE(AVG(${customerFeedback.rating}), 0)`,
+      count: sql<number>`COUNT(*)`,
+    }).from(customerFeedback).where(eq(customerFeedback.customerId, customerId));
+    
+    return {
+      averageRating: Number(result[0]?.avgRating) || 0,
+      totalReviews: Number(result[0]?.count) || 0,
+    };
   }
 }
 
