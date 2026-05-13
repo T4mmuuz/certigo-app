@@ -1,4 +1,4 @@
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { useService } from "@/hooks/use-services";
 import { useCreateBooking } from "@/hooks/use-bookings";
 import { Navbar } from "@/components/Navbar";
@@ -7,17 +7,17 @@ import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Star, MapPin, CheckCircle2, ShieldCheck, Clock, Loader2, DollarSign, Zap, Briefcase, Users, Timer, BadgeCheck, Crown, MessageSquare } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Star, MapPin, CheckCircle2, ShieldCheck, Clock, Loader2, DollarSign, Zap, Briefcase, Users, Timer, BadgeCheck, Crown, MessageSquare, ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const PRICING_TYPE_LABELS: Record<string, { label: string; color: string }> = {
   fixed: { label: "Fixed Price", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
@@ -50,21 +50,41 @@ const DURATION_OPTIONS = [
 
 export default function ServiceDetails() {
   const [match, params] = useRoute("/services/:id");
+  const [, setLocation] = useLocation();
   const id = parseInt(params?.id || "0");
   const { data: service, isLoading } = useService(id);
-  const { mutateAsync: createBooking, isPending } = useCreateBooking();
+  const { mutateAsync: createBooking } = useCreateBooking();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useLanguage();
 
-  const [date, setDate] = useState<Date | undefined>(new Date());
-  const [jobDescription, setJobDescription] = useState("");
-  const [estimatedBudget, setEstimatedBudget] = useState("");
-  const [jobSize, setJobSize] = useState<string>("");
-  const [estimatedDuration, setEstimatedDuration] = useState<string>("");
-  const [urgencyLevel, setUrgencyLevel] = useState<string>("flexible");
+  // Booking wizard state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [step, setStep] = useState<"form" | "success">("form");
+  const [wizardStep, setWizardStep] = useState(1);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Form state
+  const [jobDescription, setJobDescription] = useState("");
+  const [jobSize, setJobSize] = useState("");
+  const [urgencyLevel, setUrgencyLevel] = useState("flexible");
+  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [estimatedBudget, setEstimatedBudget] = useState("");
+  const [estimatedDuration, setEstimatedDuration] = useState("");
+
+  const TOTAL_STEPS = 3;
+  const progressPercent = (wizardStep / TOTAL_STEPS) * 100;
+
+  const resetWizard = () => {
+    setWizardStep(1);
+    setIsSuccess(false);
+    setJobDescription("");
+    setJobSize("");
+    setUrgencyLevel("flexible");
+    setDate(new Date());
+    setEstimatedBudget("");
+    setEstimatedDuration("");
+  };
 
   if (isLoading) {
     return (
@@ -74,24 +94,29 @@ export default function ServiceDetails() {
     );
   }
 
-  if (!service) return <div>Service not found</div>;
+  if (!service) return <div className="p-8 text-center text-muted-foreground">Service not found</div>;
 
   const pricingInfo = PRICING_TYPE_LABELS[(service as any).pricingType || "negotiable"];
 
+  const handleNext = () => {
+    if (wizardStep === 1 && !jobSize) {
+      toast({ title: "Select job size", description: "Please choose how big the job is.", variant: "destructive" });
+      return;
+    }
+    setWizardStep((s) => Math.min(s + 1, TOTAL_STEPS));
+  };
+
+  const handleBack = () => setWizardStep((s) => Math.max(s - 1, 1));
+
   const handleSubmitRequest = async () => {
     if (!user) {
-      toast({ title: "Please log in", description: "You need an account to book services.", variant: "destructive" });
+      toast({ title: "Please log in", variant: "destructive" });
       return;
     }
     if (!date) {
-      toast({ title: "Select a date", description: "Please pick a preferred date.", variant: "destructive" });
+      toast({ title: "Select a date", variant: "destructive" });
       return;
     }
-    if (!jobSize) {
-      toast({ title: "Select job size", description: "Please indicate how big the job is.", variant: "destructive" });
-      return;
-    }
-
     setIsProcessing(true);
     try {
       await createBooking({
@@ -106,19 +131,15 @@ export default function ServiceDetails() {
         estimatedDuration: estimatedDuration || undefined,
         urgencyLevel: urgencyLevel as any,
       } as any);
-      setStep("success");
-      toast({
-        title: "Request Sent!",
-        description: "The provider will review your request and reach out soon.",
-      });
-    } catch (error) {
+      setIsSuccess(true);
+    } catch {
       toast({ title: "Error", description: "Could not send your request. Please try again.", variant: "destructive" });
     }
     setIsProcessing(false);
   };
 
   return (
-    <div className="min-h-screen bg-background font-sans">
+    <div className="min-h-screen bg-background font-sans overflow-x-hidden">
       <Navbar />
 
       <main className="container mx-auto px-4 py-8">
@@ -142,14 +163,15 @@ export default function ServiceDetails() {
               <div className="pt-14 pb-6 px-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div>
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h1 className="text-3xl font-bold text-foreground">{service.title}</h1>
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <h1 className="text-3xl font-bold text-foreground">{service.provider.name}</h1>
                       {(service.provider as any).isPremium && (
                         <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 gap-1">
                           <Crown className="w-3 h-3" /> Pro
                         </Badge>
                       )}
                     </div>
+                    <p className="text-sm font-medium text-primary capitalize">{service.category}</p>
                     <div className="flex items-center text-muted-foreground mt-1 gap-4 text-sm flex-wrap">
                       <span className="flex items-center gap-1">
                         <MapPin className="w-4 h-4" /> Approx. area only
@@ -165,9 +187,7 @@ export default function ServiceDetails() {
                       <span className="font-bold text-lg text-amber-700 dark:text-amber-400">4.8</span>
                       <span className="text-amber-600/60 dark:text-amber-500/60 text-sm ml-1">(124 reviews)</span>
                     </div>
-                    <Badge className={pricingInfo.color}>
-                      {pricingInfo.label}
-                    </Badge>
+                    <Badge className={pricingInfo.color}>{pricingInfo.label}</Badge>
                   </div>
                 </div>
               </div>
@@ -175,36 +195,25 @@ export default function ServiceDetails() {
 
             {/* Trust Badges */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-card border border-border rounded-xl p-3 text-center">
-                <Briefcase className="w-5 h-5 mx-auto mb-1 text-primary" />
-                <p className="text-lg font-bold">47+</p>
-                <p className="text-xs text-muted-foreground">Jobs done</p>
-              </div>
-              <div className="bg-card border border-border rounded-xl p-3 text-center">
-                <Clock className="w-5 h-5 mx-auto mb-1 text-primary" />
-                <p className="text-lg font-bold">&lt; 1hr</p>
-                <p className="text-xs text-muted-foreground">Response time</p>
-              </div>
-              <div className="bg-card border border-border rounded-xl p-3 text-center">
-                <Users className="w-5 h-5 mx-auto mb-1 text-primary" />
-                <p className="text-lg font-bold">68%</p>
-                <p className="text-xs text-muted-foreground">Repeat customers</p>
-              </div>
-              <div className="bg-card border border-border rounded-xl p-3 text-center">
-                <Timer className="w-5 h-5 mx-auto mb-1 text-primary" />
-                <p className="text-lg font-bold">~30min</p>
-                <p className="text-xs text-muted-foreground">Est. arrival</p>
-              </div>
+              {[
+                { icon: Briefcase, value: "47+", label: "Jobs done" },
+                { icon: Clock, value: "< 1hr", label: "Response time" },
+                { icon: Users, value: "68%", label: "Repeat customers" },
+                { icon: Timer, value: "~30min", label: "Est. arrival" },
+              ].map(({ icon: Icon, value, label }) => (
+                <div key={label} className="bg-card border border-border rounded-xl p-3 text-center">
+                  <Icon className="w-5 h-5 mx-auto mb-1 text-primary" />
+                  <p className="text-lg font-bold text-foreground">{value}</p>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                </div>
+              ))}
             </div>
 
             {/* Description */}
             <Card className="p-8 shadow-sm border-border/60">
-              <h2 className="text-xl font-bold mb-4">About this service</h2>
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {service.description}
-              </p>
-
-              <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <h2 className="text-xl font-bold mb-2">{service.title}</h2>
+              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{service.description}</p>
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-start gap-3 p-4 rounded-xl bg-muted/40">
                   <div className="bg-background p-2 rounded-lg shadow-sm text-primary"><CheckCircle2 className="w-5 h-5" /></div>
                   <div>
@@ -235,7 +244,7 @@ export default function ServiceDetails() {
                       </div>
                       <div className="flex text-amber-500">
                         {[...Array(5)].map((_, i) => (
-                          <Star key={i} className={`w-3 h-3 ${i < review.rating ? 'fill-current' : 'text-gray-300 dark:text-gray-600'}`} />
+                          <Star key={i} className={`w-3 h-3 ${i < review.rating ? "fill-current" : "text-muted-foreground/30"}`} />
                         ))}
                       </div>
                     </div>
@@ -254,17 +263,15 @@ export default function ServiceDetails() {
           <div className="lg:col-span-1">
             <div className="sticky top-24">
               <Card className="p-6 shadow-xl border-primary/10 ring-1 ring-primary/5">
-                <div className="flex justify-between items-baseline mb-6 pb-4 border-b border-dashed">
+                <div className="flex justify-between items-baseline mb-5 pb-4 border-b border-dashed">
                   <div>
                     <span className="text-2xl font-bold text-primary">${service.price}</span>
                     <span className="text-sm text-muted-foreground ml-1">starting</span>
                   </div>
-                  <Badge className={pricingInfo.color + " text-xs"}>
-                    {pricingInfo.label}
-                  </Badge>
+                  <Badge className={pricingInfo.color + " text-xs"}>{pricingInfo.label}</Badge>
                 </div>
 
-                <div className="space-y-3 mb-6">
+                <div className="space-y-2.5 mb-6">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Category</span>
                     <span className="font-medium capitalize px-2 py-0.5 bg-muted rounded text-foreground">{service.category}</span>
@@ -281,195 +288,259 @@ export default function ServiceDetails() {
 
                 <Dialog open={isDialogOpen} onOpenChange={(open) => {
                   setIsDialogOpen(open);
-                  if (!open) setTimeout(() => setStep("form"), 300);
+                  if (!open) setTimeout(resetWizard, 300);
                 }}>
                   <DialogTrigger asChild>
                     <Button
-                      data-testid="button-book-now"
+                      data-testid="button-request-service"
                       className="w-full h-12 text-base font-semibold shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all hover:-translate-y-0.5"
                     >
-                      Request This Service
+                      {t("service.requestService")}
                     </Button>
                   </DialogTrigger>
 
                   <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>
-                        {step === "success" ? "Request Sent!" : "Request Service"}
-                      </DialogTitle>
-                      <DialogDescription>
-                        {step === "form" && "Tell the provider about your job — no payment required upfront."}
-                        {step === "success" && "Your request is on its way."}
-                      </DialogDescription>
-                    </DialogHeader>
+                    {!isSuccess ? (
+                      <>
+                        <DialogHeader>
+                          <DialogTitle>Request Service</DialogTitle>
+                          <DialogDescription>
+                            {t("service.step")} {wizardStep} {t("service.of")} {TOTAL_STEPS}
+                          </DialogDescription>
+                        </DialogHeader>
 
-                    {step === "form" && (
-                      <div className="space-y-5 py-2">
-                        {/* Job Description */}
-                        <div className="space-y-2">
-                          <Label htmlFor="job-desc" className="font-semibold">
-                            Describe your job <span className="text-muted-foreground font-normal">(optional)</span>
-                          </Label>
-                          <Textarea
-                            id="job-desc"
-                            data-testid="input-job-description"
-                            placeholder="E.g. Leaking pipe under the kitchen sink, needs to be replaced. Water is dripping slowly..."
-                            value={jobDescription}
-                            onChange={(e) => setJobDescription(e.target.value)}
-                            rows={4}
-                            className="resize-none text-base"
-                          />
-                        </div>
-
-                        {/* Job Size - Required */}
-                        <div className="space-y-2">
-                          <Label className="font-semibold">Job Size <span className="text-destructive">*</span></Label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {JOB_SIZE_OPTIONS.map((opt) => (
-                              <button
-                                key={opt.value}
-                                data-testid={`button-job-size-${opt.value}`}
-                                type="button"
-                                onClick={() => setJobSize(opt.value)}
-                                className={`text-left p-3 rounded-xl border-2 transition-all ${
-                                  jobSize === opt.value
-                                    ? "border-primary bg-primary/5"
-                                    : "border-border hover:border-primary/40"
-                                }`}
-                              >
-                                <p className="font-semibold text-sm">{opt.label}</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
-                              </button>
-                            ))}
+                        {/* Progress Bar */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>{t("service.step")} {wizardStep} {t("service.of")} {TOTAL_STEPS}</span>
+                            <span>{Math.round(progressPercent)}%</span>
+                          </div>
+                          <Progress value={progressPercent} className="h-2" />
+                          <div className="flex justify-between text-[10px] text-muted-foreground">
+                            <span className={wizardStep >= 1 ? "text-primary font-medium" : ""}>Job Details</span>
+                            <span className={wizardStep >= 2 ? "text-primary font-medium" : ""}>Timing</span>
+                            <span className={wizardStep >= 3 ? "text-primary font-medium" : ""}>Budget</span>
                           </div>
                         </div>
 
-                        {/* Urgency */}
-                        <div className="space-y-2">
-                          <Label className="font-semibold">Urgency</Label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {URGENCY_OPTIONS.map((opt) => (
-                              <button
-                                key={opt.value}
-                                data-testid={`button-urgency-${opt.value}`}
-                                type="button"
-                                onClick={() => setUrgencyLevel(opt.value)}
-                                className={`text-left p-2.5 rounded-xl border-2 transition-all text-sm ${
-                                  urgencyLevel === opt.value
-                                    ? "border-primary bg-primary/5 font-semibold"
-                                    : "border-border hover:border-primary/40"
-                                }`}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
+                        {/* STEP 1: Job Description + Job Size */}
+                        {wizardStep === 1 && (
+                          <div className="space-y-5 py-2">
+                            <div className="space-y-2">
+                              <Label className="font-semibold">
+                                {t("service.describeJob")} <span className="text-muted-foreground font-normal">(optional)</span>
+                              </Label>
+                              <Textarea
+                                data-testid="input-job-description"
+                                placeholder="E.g. Leaking pipe under the kitchen sink, needs to be replaced. Water is dripping slowly..."
+                                value={jobDescription}
+                                onChange={(e) => setJobDescription(e.target.value)}
+                                rows={4}
+                                className="resize-none text-base"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="font-semibold">
+                                {t("service.jobSize")} <span className="text-destructive">*</span>
+                              </Label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {JOB_SIZE_OPTIONS.map((opt) => (
+                                  <button
+                                    key={opt.value}
+                                    data-testid={`button-job-size-${opt.value}`}
+                                    type="button"
+                                    onClick={() => setJobSize(opt.value)}
+                                    className={`text-left p-3 rounded-xl border-2 transition-all ${
+                                      jobSize === opt.value
+                                        ? "border-primary bg-primary/5"
+                                        : "border-border hover:border-primary/40"
+                                    }`}
+                                  >
+                                    <p className="font-semibold text-sm text-foreground">{opt.label}</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">{opt.desc}</p>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        )}
 
-                        {/* Preferred Date */}
-                        <div className="space-y-2">
-                          <Label className="font-semibold">Preferred Date</Label>
-                          <div className="flex justify-center">
-                            <Calendar
-                              mode="single"
-                              selected={date}
-                              onSelect={setDate}
-                              className="rounded-xl border shadow-sm"
-                              disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
-                            />
+                        {/* STEP 2: Urgency + Date */}
+                        {wizardStep === 2 && (
+                          <div className="space-y-5 py-2">
+                            <div className="space-y-2">
+                              <Label className="font-semibold">{t("service.urgency")}</Label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {URGENCY_OPTIONS.map((opt) => (
+                                  <button
+                                    key={opt.value}
+                                    data-testid={`button-urgency-${opt.value}`}
+                                    type="button"
+                                    onClick={() => setUrgencyLevel(opt.value)}
+                                    className={`text-left p-2.5 rounded-xl border-2 transition-all text-sm ${
+                                      urgencyLevel === opt.value
+                                        ? "border-primary bg-primary/5 font-semibold text-foreground"
+                                        : "border-border hover:border-primary/40 text-foreground"
+                                    }`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="font-semibold">{t("service.preferredDate")}</Label>
+                              <div className="flex justify-center">
+                                <Calendar
+                                  mode="single"
+                                  selected={date}
+                                  onSelect={setDate}
+                                  className="rounded-xl border shadow-sm"
+                                  disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                                />
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        )}
 
-                        {/* Estimated Budget */}
-                        <div className="space-y-2">
-                          <Label htmlFor="budget" className="font-semibold">
-                            Estimated Budget <span className="text-muted-foreground font-normal">(optional)</span>
-                          </Label>
-                          <div className="relative">
-                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <Input
-                              id="budget"
-                              data-testid="input-estimated-budget"
-                              placeholder="e.g. 80-150 or 200"
-                              value={estimatedBudget}
-                              onChange={(e) => setEstimatedBudget(e.target.value)}
-                              className="pl-9"
-                            />
+                        {/* STEP 3: Budget + Duration + Submit */}
+                        {wizardStep === 3 && (
+                          <div className="space-y-5 py-2">
+                            <div className="space-y-2">
+                              <Label className="font-semibold">
+                                {t("service.estimatedBudget")} <span className="text-muted-foreground font-normal">(optional)</span>
+                              </Label>
+                              <div className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <Input
+                                  data-testid="input-estimated-budget"
+                                  placeholder="e.g. 80-150 or 200"
+                                  value={estimatedBudget}
+                                  onChange={(e) => setEstimatedBudget(e.target.value)}
+                                  className="pl-9"
+                                />
+                              </div>
+                              <p className="text-xs text-muted-foreground">Helps the provider understand your expectations</p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="font-semibold">
+                                {t("service.estimatedDuration")} <span className="text-muted-foreground font-normal">(optional)</span>
+                              </Label>
+                              <Select value={estimatedDuration} onValueChange={setEstimatedDuration}>
+                                <SelectTrigger data-testid="select-estimated-duration">
+                                  <SelectValue placeholder="How long do you expect the job to take?" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DURATION_OPTIONS.map((opt) => (
+                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {/* Summary */}
+                            <div className="bg-muted/30 rounded-xl p-4 space-y-2 text-sm">
+                              <p className="font-semibold text-foreground">Summary</p>
+                              <div className="flex justify-between text-muted-foreground">
+                                <span>Job size</span>
+                                <span className="font-medium text-foreground capitalize">{jobSize}</span>
+                              </div>
+                              <div className="flex justify-between text-muted-foreground">
+                                <span>Urgency</span>
+                                <span className="font-medium text-foreground capitalize">{urgencyLevel}</span>
+                              </div>
+                              {date && (
+                                <div className="flex justify-between text-muted-foreground">
+                                  <span>Date</span>
+                                  <span className="font-medium text-foreground">{date.toLocaleDateString()}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-xs text-muted-foreground">Helps the provider understand your expectations</p>
-                        </div>
+                        )}
 
-                        {/* Estimated Duration (optional) */}
-                        <div className="space-y-2">
-                          <Label className="font-semibold">
-                            Estimated Duration <span className="text-muted-foreground font-normal">(optional)</span>
-                          </Label>
-                          <Select value={estimatedDuration} onValueChange={setEstimatedDuration}>
-                            <SelectTrigger data-testid="select-estimated-duration">
-                              <SelectValue placeholder="How long do you expect the job to take?" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {DURATION_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
-
-                    {step === "success" && (
-                      <div className="flex flex-col items-center justify-center py-8 space-y-4 text-center">
-                        <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mb-2">
-                          <CheckCircle2 className="w-10 h-10" />
-                        </div>
-                        <h3 className="text-xl font-bold text-foreground">Request Submitted!</h3>
-                        <p className="text-muted-foreground text-sm max-w-[260px]">
-                          The provider will review your request and reach out to confirm details and pricing.
-                        </p>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 px-4 py-2 rounded-full">
-                          <MessageSquare className="w-4 h-4" />
-                          You can chat with them in My Bookings
-                        </div>
-                      </div>
-                    )}
-
-                    <DialogFooter>
-                      {step === "form" && (
-                        <Button
-                          data-testid="button-submit-request"
-                          onClick={handleSubmitRequest}
-                          className="w-full h-12 text-base gap-2"
-                          disabled={!date || !jobSize || isProcessing}
-                        >
-                          {isProcessing ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Sending Request...
-                            </>
-                          ) : (
-                            <>
-                              <Zap className="w-4 h-4" />
-                              Send Request — Free
-                            </>
+                        <DialogFooter className="flex gap-2 flex-row">
+                          {wizardStep > 1 && (
+                            <Button
+                              variant="outline"
+                              onClick={handleBack}
+                              className="flex-1 gap-1"
+                              data-testid="button-wizard-back"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                              {t("service.back")}
+                            </Button>
                           )}
-                        </Button>
-                      )}
-                      {step === "success" && (
-                        <Button
-                          data-testid="button-done"
-                          onClick={() => setIsDialogOpen(false)}
-                          className="w-full h-12"
-                        >
-                          Done
-                        </Button>
-                      )}
-                    </DialogFooter>
+                          {wizardStep < TOTAL_STEPS ? (
+                            <Button
+                              onClick={handleNext}
+                              className="flex-1 gap-1"
+                              data-testid="button-wizard-next"
+                            >
+                              {t("service.next")}
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={handleSubmitRequest}
+                              className="flex-1 gap-1"
+                              disabled={isProcessing}
+                              data-testid="button-send-request"
+                            >
+                              {isProcessing ? (
+                                <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>
+                              ) : (
+                                <><Zap className="w-4 h-4" /> {t("service.sendRequest")}</>
+                              )}
+                            </Button>
+                          )}
+                        </DialogFooter>
+                      </>
+                    ) : (
+                      /* SUCCESS SCREEN */
+                      <>
+                        <DialogHeader>
+                          <DialogTitle>{t("service.requestSent")}</DialogTitle>
+                        </DialogHeader>
+                        <div className="flex flex-col items-center justify-center py-8 space-y-4 text-center">
+                          <div className="w-24 h-24 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center">
+                            <CheckCircle2 className="w-12 h-12" />
+                          </div>
+                          <h3 className="text-2xl font-bold text-foreground">{t("service.requestSent")}</h3>
+                          <p className="text-muted-foreground text-sm max-w-[300px]">
+                            {t("service.providerResponse")} <strong>{service.provider.name}</strong>. {t("service.requestSentDesc")}
+                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 px-4 py-2 rounded-full">
+                            <MessageSquare className="w-4 h-4" />
+                            Chat with them in My Bookings
+                          </div>
+                        </div>
+                        <DialogFooter className="flex gap-2 flex-col sm:flex-row">
+                          <Button
+                            variant="outline"
+                            onClick={() => setLocation("/")}
+                            className="flex-1"
+                            data-testid="button-back-to-home"
+                          >
+                            {t("service.backToHome")}
+                          </Button>
+                          <Button
+                            onClick={() => setIsDialogOpen(false)}
+                            className="flex-1"
+                            data-testid="button-done"
+                          >
+                            {t("common.done")}
+                          </Button>
+                        </DialogFooter>
+                      </>
+                    )}
                   </DialogContent>
                 </Dialog>
 
                 <p className="text-xs text-center text-muted-foreground mt-4">
-                  Free to request — agree on price with provider before work begins.
+                  {t("service.free")} — agree on price with provider before work begins.
                 </p>
               </Card>
             </div>

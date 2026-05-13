@@ -1,0 +1,128 @@
+Eres el desarrollador principal de CertiGo, una app de servicios locales enfocada en Houston, Texas. Necesito que implementes una lista de mejoras críticas y nuevas funciones en la app. Aplica TODOS los cambios siguientes sin omitir ninguno. Si algo ya existe, mejóralo. Si no existe, créalo desde cero.
+
+---
+
+## BLOQUE 1 — CORRECCIONES CRÍTICAS EN LOGIN Y REGISTRO
+
+1. En la pantalla de LOGIN:
+   - Cambia el campo "Username" por "Email". El input debe ser de tipo email (type="email") con placeholder "Enter your email".
+   - Agrega un enlace debajo del botón de Login que diga "Forgot your password?" — al hacer click debe mostrar un modal o pantalla donde el usuario ingrese su email y reciba instrucciones de recuperación (puede ser simulado/UI only por ahora si el backend no está listo, pero el flujo visual debe existir).
+   - Agrega dos botones de login alternativo debajo del botón principal:
+     * "Continue with Google" (ícono de Google, fondo blanco, texto oscuro)
+     * "Continue with Apple" (ícono de Apple, fondo negro, texto blanco)
+   - Agrega una línea separadora con texto "or" entre el botón principal y los botones de Google/Apple.
+
+2. En la pantalla de REGISTRO (Sign Up):
+   - Cambia el campo "Username" por "Email" (type="email").
+   - Pon los campos en orden vertical, uno debajo del otro, no en dos columnas: Email → Display Name → Password → tipo de cuenta.
+   - Agrega un campo de "Confirm Password" debajo de Password.
+   - Los botones "Hire Pros" y "Offer Work" deben mantenerse pero con mejor espaciado vertical.
+   - Agrega los mismos botones de Google y Apple con separador "or" como en el login.
+
+---
+
+## BLOQUE 2 — CORRECCIÓN DEL MAPA
+
+3. El mapa principal de la app actualmente abre centrado en New York. Cámbialo para que se centre en Houston, Texas con estas coordenadas exactas:
+   - Latitud: 29.7604
+   - Longitud: -95.3698
+   - Zoom inicial: 11
+   - Esto debe ser el centro por defecto cuando ningún usuario ha dado permiso de ubicación.
+
+4. Reduce la altura del mapa en móvil a máximo 200px para que los listados de servicios sean visibles sin hacer scroll. En desktop puede mantenerse más grande.
+
+---
+
+## BLOQUE 3 — MEJORA DEL FLUJO DE SOLICITUD DE SERVICIO
+
+5. El modal "Request Service" actualmente es un formulario largo en una sola pantalla. Conviértelo en un flujo de 3 pasos (wizard/stepper):
+   - Paso 1 de 3: "Describe your job" + "Job Size" (Small/Medium/Large/Emergency)
+   - Paso 2 de 3: "Urgency" (Flexible/Today/ASAP/Emergency) + "Preferred Date" (calendario)
+   - Paso 3 de 3: "Estimated Budget" (optional) + "Estimated Duration" (optional) + botón "Send Request — Free"
+   - Muestra en la parte superior el indicador de progreso: Step 1 of 3, Step 2 of 3, Step 3 of 3 con una barra de progreso visual.
+   - Botones "Back" y "Next" entre pasos. Solo el último paso tiene el botón "Send Request — Free".
+
+6. Después de hacer click en "Send Request — Free", muestra una pantalla/modal de confirmación con:
+   - Ícono de check verde grande
+   - Título: "Request Sent!"
+   - Texto: "Your request has been sent to [nombre del proveedor]. They typically respond in less than 1 hour. You'll receive a notification when they reply."
+   - Botón: "Back to Home"
+
+---
+
+## BLOQUE 4 — MEJORAS EN EL PERFIL DEL TRABAJADOR
+
+7. En el perfil del trabajador, el nombre del servicio aparece en minúscula (ej: "landscaping"). Cambia esto para que el título principal del perfil muestre el nombre real del trabajador (Display Name) en grande, y debajo en texto más pequeño la categoría del servicio. Ejemplo: "Guillermo Martínez" en grande, "Landscaping" debajo en gris/rojo pequeño.
+
+8. Agrega soporte para foto de perfil real en el registro y en el perfil. Si no hay foto, mostrar la inicial del nombre en el avatar (como ya está). El botón para subir foto debe aparecer en la pantalla de edición de perfil.
+
+---
+
+## BLOQUE 5 — SISTEMA DE IDIOMAS (20 idiomas)
+
+9. Agrega en la sección de Ajustes/Settings un apartado llamado "Language / Idioma" con la opción de seleccionar entre los siguientes 20 idiomas. Cada idioma debe mostrarse en su nombre nativo + su nombre en inglés entre paréntesis:
+
+   1. English (English)
+   2. Español (Spanish)
+   3. 中文 (Chinese - Simplified)
+   4. हिन्दी (Hindi)
+   5. العربية (Arabic)
+   6. Français (French)
+   7. Português (Portuguese)
+   8. Русский (Russian)
+   9. Deutsch (German)
+   10. 日本語 (Japanese)
+   11. 한국어 (Korean)
+   12. Italiano (Italian)
+   13. Türkçe (Turkish)
+   14. Tiếng Việt (Vietnamese)
+   15. Polski (Polish)
+   16. Nederlands (Dutch)
+   17. Bahasa Indonesia (Indonesian)
+   18. Tagalog (Filipino)
+   19. ภาษาไทย (Thai)
+   20. Українська (Ukrainian)
+
+10. El idioma seleccionado debe guardarse en localStorage para persistir entre sesiones.
+
+11. Al seleccionar un idioma, toda la interfaz visible de la app debe cambiar a ese idioma. Como mínimo, traduce los siguientes textos de la UI principal al menos a Español e Inglés de forma completa. Para los otros 18 idiomas, implementa las traducciones para los textos más importantes de la navegación y pantallas principales (puedes usar un objeto de traducciones i18n en JavaScript/JSON). Los textos mínimos a traducir son:
+    - Todos los labels de login/registro
+    - Navegación principal
+    - Botones principales (Request Service, Send Request, Sign Up, Log In, etc.)
+    - Títulos de secciones principales
+    - Mensajes de confirmación
+
+12. En la pantalla de Settings, el selector de idioma debe mostrar:
+    - Una lista tipo dropdown o lista de selección con scroll
+    - La bandera emoji del país principal que habla ese idioma al lado del nombre
+    - El idioma actualmente seleccionado debe estar marcado con un checkmark ✓
+    - Un botón "Save Language" para confirmar el cambio
+
+---
+
+## BLOQUE 6 — MEJORAS GENERALES DE UX
+
+13. En las categorías de búsqueda (los chips/pills debajo de la barra de búsqueda), implementa scroll horizontal para que se puedan ver todas las categorías disponibles sin que la pantalla se expanda. No deben hacer wrap a la siguiente línea.
+
+14. Asegúrate de que toda la app use el mismo sistema de colores consistente:
+    - Fondo principal: #0a0a0a (negro casi puro)
+    - Rojo primario: #e63946
+    - Rojo hover/active: #c1121f
+    - Texto principal: #ffffff
+    - Texto secundario: #999999
+    - Cards/superficies: #1a1a1a
+    - Bordes: #2a2a2a
+
+15. En móvil, asegúrate de que ningún elemento tenga overflow horizontal (que la pantalla no se pueda mover hacia los lados). Agrega overflow-x: hidden al body y al contenedor principal.
+
+---
+
+## INSTRUCCIONES FINALES PARA EL AGENTE
+
+- Aplica TODOS los cambios anteriores.
+- No elimines funcionalidad que ya existe y funciona.
+- Mantén el diseño dark mode con el esquema de colores rojo/negro actual.
+- Si usas JavaScript puro, organiza las traducciones en un objeto global llamado `CERTIGO_TRANSLATIONS`.
+- Si usas React, crea un contexto llamado `LanguageContext`.
+- Prueba mentalmente cada flujo antes de entregar: login, registro, búsqueda, ver perfil, solicitar servicio, confirmación, cambiar idioma en settings.
+- Cuando termines, muéstrame qué archivos modificaste y cuáles creaste.
