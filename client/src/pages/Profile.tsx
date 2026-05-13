@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Plus, Settings, Camera, Gift, Copy, Check, Wallet, ExternalLink, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useRef } from "react";
 import { Redirect } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +31,7 @@ export default function Profile() {
   const [desc, setDesc] = useState("");
   const [cat, setCat] = useState("plumbing");
   const [price, setPrice] = useState("50");
+  const [pricingType, setPricingType] = useState<"fixed" | "negotiable" | "hourly" | "free_estimate">("negotiable");
 
   const { data: referralStats } = useQuery<{
     totalReferrals: number;
@@ -101,10 +103,12 @@ export default function Profile() {
         price: parseInt(price),
         lat: user.lat || 40.7128,
         lng: user.lng || -74.0060,
-      });
+        pricingType,
+      } as any);
       setIsDialogOpen(false);
       setTitle("");
       setDesc("");
+      setPricingType("negotiable");
     } catch (e) {
     }
   };
@@ -402,14 +406,28 @@ export default function Profile() {
                             <Input 
                               value={cat} 
                               onChange={e => setCat(e.target.value)} 
-                              placeholder="e.g. Plumbing, Welding, Gardening"
+                              placeholder="e.g. Plumbing, Welding"
                               data-testid="input-service-category"
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label>Hourly Rate ($)</Label>
+                            <Label>Starting Price ($)</Label>
                             <Input type="number" value={price} onChange={e => setPrice(e.target.value)} data-testid="input-service-price" />
                           </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Pricing Type</Label>
+                          <Select value={pricingType} onValueChange={(v) => setPricingType(v as any)}>
+                            <SelectTrigger data-testid="select-pricing-type">
+                              <SelectValue placeholder="How do you charge?" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="fixed">Fixed Price — set rate per job</SelectItem>
+                              <SelectItem value="negotiable">Negotiable — agree with customer</SelectItem>
+                              <SelectItem value="hourly">Hourly Rate — charged by the hour</SelectItem>
+                              <SelectItem value="free_estimate">Free Estimate — quote first, then decide</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="space-y-2">
                           <Label>Description</Label>

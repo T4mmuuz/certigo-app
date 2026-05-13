@@ -170,7 +170,12 @@ export default function Home() {
                           </div>
                           <div className="text-right">
                             <span className="block font-bold text-primary text-lg">${service.price}</span>
-                            <span className="text-[10px] text-muted-foreground uppercase font-medium">per hour</span>
+                            <span className="text-[10px] text-muted-foreground uppercase font-medium">
+                              {(service as any).pricingType === "hourly" ? "per hour" :
+                               (service as any).pricingType === "fixed" ? "fixed" :
+                               (service as any).pricingType === "free_estimate" ? "free est." :
+                               "starting"}
+                            </span>
                           </div>
                         </div>
                         

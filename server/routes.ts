@@ -291,7 +291,13 @@ export async function registerRoutes(
       const input = api.bookings.create.input.parse({
         ...req.body,
         customerId: user.id, // Always use authenticated user's ID
-        date: new Date(req.body.date)
+        date: new Date(req.body.date),
+        // Accept new per-job fields
+        estimatedBudget: req.body.estimatedBudget || null,
+        jobSize: req.body.jobSize || null,
+        estimatedDuration: req.body.estimatedDuration || null,
+        urgencyLevel: req.body.urgencyLevel || "flexible",
+        jobDescription: req.body.jobDescription || null,
       });
       const booking = await storage.createBooking(input);
       

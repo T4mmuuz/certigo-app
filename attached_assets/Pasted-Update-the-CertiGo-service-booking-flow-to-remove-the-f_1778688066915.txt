@@ -1,0 +1,137 @@
+Update the CertiGo service booking flow to remove the forced “hourly hiring” experience and redesign it into a modern “per job / estimated budget” system optimized for local services and mobile workers.
+
+MAIN GOAL:
+Users should request a service based on the job itself, not based on locking workers into a strict number of hours.
+
+REMOVE OR CHANGE:
+- Remove the required “hours” input field from the order form.
+- Remove the default value of “1 hour”.
+- Users should not be forced to enter hours before placing an order.
+- Remove any UI that feels like a time-clock or employee shift system.
+
+REPLACE WITH:
+1. “Estimated Budget” field
+   - User can type:
+     - fixed price,
+     - estimated range,
+     - or leave blank.
+   - Example placeholder:
+     “Example: $80-$150”
+
+2. “Job Size / Complexity” selector
+   Options:
+   - Small Job
+   - Medium Job
+   - Large Job
+   - Emergency / ASAP
+
+3. “Estimated Duration” (OPTIONAL, NOT REQUIRED)
+   - Optional dropdown:
+     - Less than 1 hour
+     - 1-3 hours
+     - Half day
+     - Full day
+     - Multi-day
+   - This should only help workers understand the request.
+   - It should NOT affect billing automatically.
+
+4. Improve worker payment flexibility
+   Workers should be able to choose:
+   - Fixed price jobs
+   - Negotiable pricing
+   - Hourly pricing (optional for specific categories only)
+
+5. Add “Price Type” badge on worker profiles
+   Examples:
+   - Fixed Price
+   - Negotiable
+   - Hourly
+   - Free Estimate
+
+6. Improve service request form UI
+   Make the request flow cleaner and more modern:
+   - Larger text area for describing the problem
+   - Easier image upload
+   - Add “Urgency” selector:
+     - Flexible
+     - Today
+     - ASAP
+     - Emergency
+
+7. Improve trust and transparency
+   Add:
+   - “Estimated arrival time”
+   - “Typical response time”
+   - “Jobs completed”
+   - “Repeat customers”
+
+8. Add smarter category logic
+   Some categories should default to “Per Job” instead of hourly:
+   - Mechanics
+   - Movers
+   - Appliance repair
+   - Cleaning
+   - Handyman
+   - Roadside assistance
+
+9. Future-ready architecture
+   Structure the backend so pricing models can support:
+   - fixed jobs,
+   - hourly jobs,
+   - bidding,
+   - quotes,
+   - milestone payments,
+   - and subscriptions later.
+
+10. Improve mobile UX
+   - Make buttons larger
+   - Reduce clutter
+   - Reduce unnecessary fields
+   - Make the booking flow feel fast like Uber/DoorDash.
+
+11. Add quote request flow
+   Instead of forcing instant payment:
+   - user can request quote,
+   - worker can accept/reject,
+   - negotiate price,
+   - then confirm booking.
+
+12. Improve map/privacy logic
+   Keep approximate worker area visibility:
+   - show general area,
+   - NOT exact real-time location until the job is accepted.
+
+13. Improve trust system
+   Add placeholders for:
+   - ID verification,
+   - worker badges,
+   - insurance verification,
+   - certifications,
+   - reviews with photos.
+
+14. UI/UX improvements
+   Make the app feel less like a freelance website and more like a modern local-services platform.
+   Prioritize:
+   - speed,
+   - simplicity,
+   - trust,
+   - mobile-first design,
+   - and fast booking.
+
+15. Database changes
+   Update schemas to support:
+   - pricingType
+   - estimatedBudget
+   - urgencyLevel
+   - estimatedDuration
+   - negotiablePricing
+   - quoteRequests
+   - serviceStatus
+   - workerResponseTime
+
+16. Preserve compatibility
+   Ensure old hourly-based listings still work temporarily during migration.
+
+17. General cleanup
+   Remove unnecessary complexity and anything that makes the app feel confusing or outdated.
+   Improve consistency across all booking screens.

@@ -28,9 +28,11 @@ export const services = pgTable("services", {
   title: text("title").notNull(), // e.g., "Experienced Plumber"
   description: text("description").notNull(),
   category: text("category").notNull(), // e.g., "plumbing", "welding"
-  price: integer("price").notNull(), // Hourly rate or base price
+  price: integer("price").notNull(), // Base price or starting rate
   lat: real("lat").notNull(),
   lng: real("lng").notNull(),
+  pricingType: text("pricing_type", { enum: ["fixed", "negotiable", "hourly", "free_estimate"] }).default("negotiable"),
+  responseTime: text("response_time"), // e.g., "Within 1 hour", "Same day"
 });
 
 export const bookings = pgTable("bookings", {
@@ -43,7 +45,13 @@ export const bookings = pgTable("bookings", {
   paymentMethod: text("payment_method", { enum: ["app", "cash"] }).default("app").notNull(),
   cancelledBy: text("cancelled_by", { enum: ["customer", "provider"] }),
   cancelledAt: timestamp("cancelled_at"),
-  hours: integer("hours").default(1).notNull(),
+  hours: integer("hours"), // Optional, kept for backward compat
+  // New per-job fields
+  estimatedBudget: text("estimated_budget"), // e.g. "$80-$150" or "80"
+  jobSize: text("job_size", { enum: ["small", "medium", "large", "emergency"] }),
+  estimatedDuration: text("estimated_duration"), // e.g. "1-3 hours", "half day"
+  urgencyLevel: text("urgency_level", { enum: ["flexible", "today", "asap", "emergency"] }).default("flexible"),
+  jobDescription: text("job_description"), // Customer's description of the problem
 });
 
 export const reviews = pgTable("reviews", {
