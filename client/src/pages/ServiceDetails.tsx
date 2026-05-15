@@ -98,6 +98,13 @@ export default function ServiceDetails() {
 
   const pricingInfo = PRICING_TYPE_LABELS[(service as any).pricingType || "negotiable"];
 
+  // Real stats computed from actual review data
+  const reviewCount = service.reviews?.length ?? 0;
+  const avgRating = reviewCount > 0
+    ? service.reviews!.reduce((sum: number, r: any) => sum + (r.rating || 0), 0) / reviewCount
+    : 0;
+  const isNewProvider = reviewCount === 0;
+
   const handleNext = () => {
     if (wizardStep === 1 && !jobSize) {
       toast({ title: "Select job size", description: "Please choose how big the job is.", variant: "destructive" });
@@ -182,31 +189,44 @@ export default function ServiceDetails() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <div className="flex items-center bg-amber-50 dark:bg-amber-900/20 px-3 py-1 rounded-full border border-amber-100 dark:border-amber-800">
-                      <Star className="w-5 h-5 fill-amber-500 text-amber-500 mr-1.5" />
-                      <span className="font-bold text-lg text-amber-700 dark:text-amber-400">4.8</span>
-                      <span className="text-amber-600/60 dark:text-amber-500/60 text-sm ml-1">(124 reviews)</span>
-                    </div>
+                    {reviewCount > 0 ? (
+                      <div className="flex items-center bg-amber-50 dark:bg-amber-900/20 px-3 py-1 rounded-full border border-amber-100 dark:border-amber-800">
+                        <Star className="w-5 h-5 fill-amber-500 text-amber-500 mr-1.5" />
+                        <span className="font-bold text-lg text-amber-700 dark:text-amber-400">{avgRating.toFixed(1)}</span>
+                        <span className="text-amber-600/60 dark:text-amber-500/60 text-sm ml-1">({reviewCount} {reviewCount === 1 ? "review" : "reviews"})</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center bg-muted px-3 py-1 rounded-full border border-border text-sm text-muted-foreground">
+                        No reviews yet
+                      </div>
+                    )}
                     <Badge className={pricingInfo.color}>{pricingInfo.label}</Badge>
                   </div>
                 </div>
               </div>
             </Card>
 
-            {/* Trust Badges */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                { icon: Briefcase, value: "47+", label: "Jobs done" },
-                { icon: Clock, value: "< 1hr", label: "Response time" },
-                { icon: Users, value: "68%", label: "Repeat customers" },
-                { icon: Timer, value: "~30min", label: "Est. arrival" },
-              ].map(({ icon: Icon, value, label }) => (
-                <div key={label} className="bg-card border border-border rounded-xl p-3 text-center">
-                  <Icon className="w-5 h-5 mx-auto mb-1 text-primary" />
-                  <p className="text-lg font-bold text-foreground">{value}</p>
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                </div>
-              ))}
+            {/* Trust Badges — real data only */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="bg-card border border-border rounded-xl p-3 text-center">
+                <Briefcase className="w-5 h-5 mx-auto mb-1 text-primary" />
+                <p className="text-lg font-bold text-foreground">{reviewCount}</p>
+                <p className="text-xs text-muted-foreground">{reviewCount === 1 ? "Job completed" : "Jobs completed"}</p>
+              </div>
+              <div className="bg-card border border-border rounded-xl p-3 text-center">
+                <Star className="w-5 h-5 mx-auto mb-1 text-primary" />
+                {reviewCount > 0 ? (
+                  <p className="text-lg font-bold text-foreground">{avgRating.toFixed(1)}/5</p>
+                ) : (
+                  <p className="text-sm font-medium text-muted-foreground">No data</p>
+                )}
+                <p className="text-xs text-muted-foreground">Avg. rating</p>
+              </div>
+              <div className="bg-card border border-border rounded-xl p-3 text-center col-span-2 md:col-span-1">
+                <ShieldCheck className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
+                <p className="text-sm font-medium text-muted-foreground">{isNewProvider ? "New provider" : "Active"}</p>
+                <p className="text-xs text-muted-foreground">Account status</p>
+              </div>
             </div>
 
             {/* Description */}

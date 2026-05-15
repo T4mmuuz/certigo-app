@@ -1,0 +1,137 @@
+CertiGo es una aplicación web que conecta usuarios con profesionales certificados locales (jardineros, plomeros, electricistas, etc.). Los usuarios pueden buscar profesionales en su ciudad, ver sus perfiles, y contactarlos. Los profesionales pueden registrarse, ofrecer sus servicios y optar por una cuenta premium para aparecer primero en los resultados de búsqueda.
+
+La app ya tiene:
+- Login / Sign Up con Google y Apple
+- Modo oscuro / claro
+- Selector de idioma (inglés / español)
+- Perfil de trabajador con datos mostrados
+- Sección de cuenta Premium para trabajadores
+
+---
+
+## 🐛 BUGS A CORREGIR
+
+### 1. El cambio de idioma NO actualiza toda la app
+Actualmente, cuando el usuario cambia el idioma en el apartado de Ajustes (de inglés a español o viceversa), **solo cambian 1 o 2 textos** en pantalla. El resto de la app permanece en el idioma anterior.
+
+**Lo que se necesita:**
+- Implementar un sistema de internacionalización (i18n) completo y consistente en TODA la app.
+- Absolutamente TODOS los textos visibles en la interfaz deben estar ligados al idioma seleccionado: botones, etiquetas, placeholders, mensajes de error, notificaciones, títulos de secciones, descripciones, tooltips, y cualquier texto en pantalla.
+- El cambio de idioma debe aplicarse de forma INMEDIATA en toda la app sin necesidad de recargar la página.
+- El idioma seleccionado debe guardarse en las preferencias del usuario (localStorage o base de datos del usuario) para que persista entre sesiones.
+- Idiomas a soportar inicialmente: **Español** e **Inglés**.
+
+---
+
+### 2. Perfil de trabajador nuevo muestra datos falsos predeterminados
+Cuando un usuario crea una cuenta como trabajador (proveedor de servicios), su perfil muestra automáticamente datos falsos que no corresponden a la realidad:
+- ⭐ 4.8 estrellas con 124 reviews
+- 47+ jobs done
+- <1hr response time
+- 68% est. arrival
+- Background checked
+
+**Lo que se necesita:**
+- Las cuentas nuevas de trabajadores deben iniciar con **todos estos campos en cero o vacíos**, mostrando mensajes apropiados como:
+  - "Sin reseñas aún"
+  - "0 trabajos completados"
+  - "Tiempo de respuesta: sin datos aún"
+  - El badge de "Background Checked" solo debe mostrarse si el trabajador lo ha verificado manualmente (proceso a definir más adelante).
+- **Todos estos datos deben actualizarse en tiempo real** conforme el trabajador recibe reseñas, completa trabajos, y mejora su tiempo de respuesta.
+- La calificación de estrellas solo debe calcularse y mostrarse cuando el trabajador tenga **al menos 1 reseña real**.
+- El porcentaje de llegada estimada debe calcularse a partir de trabajos reales completados, no ser un valor estático.
+
+---
+
+### 3. Precio de cuenta Premium incorrecto
+El plan Premium para trabajadores actualmente muestra **$27/mes**.
+
+**Lo que se necesita:**
+- Cambiar el precio a **$15/mes** en todos los lugares donde aparezca: pantalla de upgrade, perfil, landing, cards comparativas, emails, etc.
+
+---
+
+## ✅ MEJORAS A IMPLEMENTAR EN AJUSTES
+
+El apartado de Ajustes actualmente solo tiene 2 opciones (modo oscuro/claro y cambio de idioma). Se deben agregar las siguientes secciones y opciones:
+
+### Perfil y Cuenta
+- Editar nombre, foto de perfil y descripción
+- Cambiar contraseña (para cuentas sin Google/Apple)
+- Gestionar métodos de inicio de sesión vinculados (Google, Apple)
+- Eliminar cuenta (con confirmación)
+
+### Notificaciones
+- Activar/desactivar notificaciones push
+- Notificaciones por email (nuevos mensajes, nuevas reseñas, actualizaciones de trabajo)
+- Frecuencia de resumen semanal (para trabajadores: estadísticas de visitas a su perfil)
+
+### Privacidad y Seguridad
+- Mostrar/ocultar número de teléfono en el perfil público
+- Gestión de datos personales (exportar o solicitar eliminación de datos — cumplimiento GDPR/CCPA)
+
+### Pagos (solo trabajadores)
+- Ver plan actual (gratuito o premium)
+- Upgrade / downgrade de plan
+- Historial de pagos
+- Método de pago guardado
+
+### Apariencia
+- Modo claro / oscuro (ya existe, mantener)
+- Idioma (ya existe, mantener — pero con el bug de i18n corregido)
+- Tamaño de fuente (normal / grande) — accesibilidad
+
+### Soporte
+- Centro de ayuda / FAQ
+- Reportar un problema
+- Chat de soporte o formulario de contacto
+- Términos y condiciones
+- Política de privacidad
+
+---
+
+## 🧩 OTRAS MEJORAS GENERALES RECOMENDADAS
+
+### Para usuarios que buscan servicios:
+- Historial de búsquedas recientes
+- Trabajadores favoritos (guardar perfil para después)
+- Sistema de chat/mensajería directo dentro de la app entre usuario y trabajador
+- Estado del trabajo en tiempo real: Solicitado → Confirmado → En camino → Completado
+- Notificación cuando el trabajador está en camino
+
+### Para trabajadores:
+- Dashboard con métricas reales en tiempo real: visitas al perfil, solicitudes recibidas, trabajos completados, calificación promedio
+- Gestión de disponibilidad (horario semanal, días libres)
+- Portafolio de trabajos anteriores (fotos antes/después)
+- Insignias que se desbloqueen automáticamente al alcanzar hitos reales: "10 trabajos completados", "50 reseñas 5 estrellas", etc.
+
+### Generales:
+- Onboarding de bienvenida (tutorial corto de 3-4 pasos al crear cuenta nueva, tanto para usuario como para trabajador)
+- Pantalla de "Cuenta creada con éxito" con pasos sugeridos a seguir
+- Verificación de email al registrarse (si no se usó Google/Apple)
+- Manejo de errores visible para el usuario (mensajes claros cuando algo falla)
+- Skeleton loaders mientras carga el contenido (en vez de pantallas en blanco)
+
+---
+
+## 📱 CONSIDERACIONES PARA PREPARAR EL SALTO A NATIVO (iOS y Android)
+
+Aunque todavía es web app, construir con esto en mente facilitará la migración:
+- Todos los componentes deben estar organizados de forma modular y reutilizable
+- Evitar dependencias que no tengan equivalente en React Native
+- La navegación debe estar bien estructurada (bottom tab bar style, no sidebar horizontal)
+- Las imágenes y assets deben estar optimizados para pantallas móviles (@2x, @3x)
+- Los formularios deben ser amigables con teclados móviles (scroll automático al campo activo)
+- El diseño debe respetar las zonas seguras (safe area) de iOS (notch, home bar)
+
+---
+
+## 🎯 RESUMEN DE PRIORIDADES (en orden)
+
+1. **CRÍTICO** — Corregir bug de cambio de idioma (i18n completo)
+2. **CRÍTICO** — Eliminar datos falsos en perfiles nuevos de trabajadores + actualización en tiempo real
+3. **IMPORTANTE** — Cambiar precio premium de $27 a $15/mes
+4. **IMPORTANTE** — Expandir sección de Ajustes con las nuevas opciones
+5. **DESEABLE** — Dashboard de métricas reales para trabajadores
+6. **DESEABLE** — Sistema de chat interno
+7. **DESEABLE** — Onboarding de bienvenida para cuentas nuevas

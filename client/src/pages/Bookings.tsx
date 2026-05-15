@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useBookings } from "@/hooks/use-bookings";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function Bookings() {
   const { data: bookings, isLoading, refetch } = useBookings();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [loadingChatBookingId, setLoadingChatBookingId] = useState<number | null>(null);
@@ -198,7 +200,7 @@ export default function Bookings() {
       <Navbar />
       
       <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <h1 className="text-3xl font-display font-bold mb-8">My Bookings</h1>
+        <h1 className="text-3xl font-bold mb-8">{t("nav.bookings")}</h1>
 
         {isLoading ? (
           <div className="flex justify-center py-12">
@@ -207,8 +209,8 @@ export default function Bookings() {
         ) : !bookings || bookings.length === 0 ? (
           <div className="text-center py-12 bg-secondary/30 rounded-2xl border border-dashed border-border">
             <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium">No bookings yet</h3>
-            <p className="text-muted-foreground">Find a professional and schedule your first service!</p>
+            <h3 className="text-lg font-medium">{t("home.noServices")}</h3>
+            <p className="text-muted-foreground">{t("home.expertsNearby")}</p>
           </div>
         ) : (
           <div className="grid gap-4">
@@ -270,7 +272,7 @@ export default function Bookings() {
                           ) : (
                             <MessageSquare className="w-4 h-4 mr-2" />
                           )}
-                          {isChatLoading ? "Opening..." : "Chat"}
+                          {isChatLoading ? t("common.loading") : t("nav.messages")}
                         </Button>
 
                         {showRebookButton && (
@@ -286,7 +288,7 @@ export default function Bookings() {
                             ) : (
                               <RotateCcw className="w-4 h-4 mr-2" />
                             )}
-                            {isRebooking ? "Booking..." : "Book Again"}
+                            {isRebooking ? t("common.loading") : "Book Again"}
                           </Button>
                         )}
 

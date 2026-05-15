@@ -141,7 +141,7 @@ export default function Premium() {
             </CardHeader>
             <CardContent className="text-center">
               <div className="mb-6">
-                <span className="text-5xl font-bold">$27</span>
+                <span className="text-5xl font-bold">$15</span>
                 <span className="text-muted-foreground">/month</span>
               </div>
               <Button 
