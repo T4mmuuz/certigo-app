@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Star, MapPin, CheckCircle2, ShieldCheck, Clock, Loader2, DollarSign, Zap, Briefcase, Users, Timer, BadgeCheck, Crown, MessageSquare, ChevronLeft } from "lucide-react";
+import { Star, MapPin, CheckCircle2, ShieldCheck, Clock, Loader2, DollarSign, Zap, Briefcase, Users, Timer, BadgeCheck, MessageSquare, ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -172,12 +172,7 @@ export default function ServiceDetails() {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap mb-0.5">
                       <h1 className="text-3xl font-bold text-foreground">{service.provider.name}</h1>
-                      {(service.provider as any).isPremium && (
-                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 gap-1">
-                          <Crown className="w-3 h-3" /> Pro
-                        </Badge>
-                      )}
-                    </div>
+                      </div>
                     <p className="text-sm font-medium text-primary capitalize">{service.category}</p>
                     <div className="flex items-center text-muted-foreground mt-1 gap-4 text-sm flex-wrap">
                       <span className="flex items-center gap-1">

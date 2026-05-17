@@ -26,7 +26,7 @@ export const LANGUAGES = [
 type TranslationKey =
   | "nav.home" | "nav.bookings" | "nav.profile" | "nav.settings" | "nav.messages"
   | "nav.notifications" | "nav.logout" | "nav.login" | "nav.signup" | "nav.earnings"
-  | "nav.premium" | "nav.myServices"
+  | "nav.myServices"
   | "auth.email" | "auth.password" | "auth.confirmPassword" | "auth.displayName"
   | "auth.login" | "auth.signup" | "auth.forgotPassword" | "auth.forgotPasswordDesc"
   | "auth.sendReset" | "auth.orContinueWith" | "auth.continueGoogle" | "auth.continueApple"
@@ -56,7 +56,7 @@ const EN: Translations = {
   "nav.login": "Log in",
   "nav.signup": "Sign up",
   "nav.earnings": "Earnings",
-  "nav.premium": "Premium",
+
   "nav.myServices": "My Services",
   "auth.email": "Email",
   "auth.password": "Password",
@@ -123,7 +123,7 @@ const ES: Translations = {
   "nav.login": "Iniciar sesión",
   "nav.signup": "Registrarse",
   "nav.earnings": "Ganancias",
-  "nav.premium": "Premium",
+
   "nav.myServices": "Mis Servicios",
   "auth.email": "Correo electrónico",
   "auth.password": "Contraseña",

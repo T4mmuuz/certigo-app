@@ -10,9 +10,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import {
-  Globe, Moon, Sun, Check, Bell, Shield, CreditCard, HelpCircle,
-  User, Lock, Trash2, Eye, EyeOff, Mail, MessageSquare, BarChart3,
-  FileText, AlertCircle, ExternalLink, ChevronRight, Crown, Type, Download
+  Globe, Moon, Sun, Check, Bell, Shield, HelpCircle,
+  User, Lock, Trash2, Mail, MessageSquare,
+  FileText, AlertCircle, ChevronRight, Download
 } from "lucide-react";
 import { useLanguage, LANGUAGES } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/use-auth";
@@ -260,46 +260,6 @@ export default function Settings() {
             />
           </CardContent>
         </Card>
-
-        {/* ── PAYMENTS (providers only) ─────────────────────────── */}
-        {user?.role === "provider" && (
-          <Card>
-            <CardHeader className="pb-2">
-              <SectionHeader icon={CreditCard} title="Payments & Plan" description="Manage your subscription and billing" />
-            </CardHeader>
-            <CardContent className="divide-y divide-border">
-              <div className="flex items-center justify-between py-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Current Plan</p>
-                  <p className="text-xs text-muted-foreground">
-                    {(user as any).isPremium ? "CertiGo Premium — $15/month" : "Free Plan"}
-                  </p>
-                </div>
-                {(user as any).isPremium ? (
-                  <span className="text-xs font-semibold text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-1 rounded-full flex items-center gap-1">
-                    <Crown className="w-3 h-3" /> Premium
-                  </span>
-                ) : (
-                  <Button size="sm" variant="outline" onClick={() => setLocation("/premium")} className="text-xs gap-1">
-                    <Crown className="w-3 h-3" /> Upgrade — $15/mo
-                  </Button>
-                )}
-              </div>
-              <LinkRow
-                icon={BarChart3}
-                label="Billing History"
-                sublabel="View past invoices and payments"
-                onClick={() => setLocation("/earnings")}
-              />
-              <LinkRow
-                icon={CreditCard}
-                label="Saved Payment Method"
-                sublabel="Manage your card on file"
-                onClick={() => toast({ title: "Coming soon", description: "Payment method management will be available soon." })}
-              />
-            </CardContent>
-          </Card>
-        )}
 
         {/* ── APPEARANCE ────────────────────────────────────────── */}
         <Card>

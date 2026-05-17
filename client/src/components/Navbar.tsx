@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, LogOut, Briefcase, Calendar, DollarSign, Crown, Moon, Sun, Bell, Check, MessageSquare, Settings } from "lucide-react";
+import { Search, User, LogOut, Briefcase, Calendar, DollarSign, Moon, Sun, Bell, Check, MessageSquare, Settings } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -202,9 +202,6 @@ export function Navbar() {
                   <>
                     <DropdownMenuItem onClick={() => setLocation("/profile")} className="cursor-pointer rounded-lg text-primary font-medium">
                       <Briefcase className="w-4 h-4 mr-2" /> {t("nav.myServices")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setLocation("/premium")} className="cursor-pointer rounded-lg text-yellow-600 dark:text-yellow-400 font-medium">
-                      <Crown className="w-4 h-4 mr-2" /> {t("nav.premium")}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setLocation("/earnings")} className="cursor-pointer rounded-lg text-green-600 dark:text-green-400 font-medium">
                       <DollarSign className="w-4 h-4 mr-2" /> {t("nav.earnings")}
