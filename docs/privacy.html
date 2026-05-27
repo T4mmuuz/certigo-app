@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — CertiGo</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg2: #f7f6f3;
+    --text: #1a1a18;
+    --muted: #6b6b67;
+    --border: rgba(0,0,0,0.1);
+    --accent: #1D9E75;
+    --accent-light: #E1F5EE;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --bg2: #242422;
+      --text: #f0ede6;
+      --muted: #9a9a94;
+      --border: rgba(255,255,255,0.1);
+      --accent: #5DCAA5;
+      --accent-light: #04342C;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Georgia', serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.8;
+    font-size: 16px;
+  }
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 2rem 1.5rem 1.5rem;
+    text-align: center;
+  }
+  .logo {
+    font-family: 'Georgia', serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+    margin-bottom: 0.5rem;
+  }
+  .tagline {
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .lang-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 1.25rem;
+  }
+  .lang-btn {
+    padding: 6px 20px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .lang-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 4rem;
+  }
+  .section { display: none; }
+  .section.active { display: block; }
+  .effective {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  h2 {
+    font-size: 17px;
+    font-weight: 700;
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--text);
+    font-family: 'Georgia', serif;
+  }
+  h2::before {
+    content: '§';
+    color: var(--accent);
+    margin-right: 8px;
+    font-weight: 400;
+  }
+  p { margin-bottom: 1rem; color: var(--text); }
+  ul {
+    margin: 0.5rem 0 1rem 1.25rem;
+    color: var(--text);
+  }
+  li { margin-bottom: 0.4rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .highlight {
+    background: var(--accent-light);
+    border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem;
+    border-radius: 0 6px 6px 0;
+    margin: 1rem 0;
+    font-size: 14px;
+  }
+  footer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 2rem 1rem;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CertiGo</div>
+  <div class="tagline">Privacy Policy / Política de Privacidad</div>
+  <div class="lang-tabs">
+    <button class="lang-btn active" onclick="setLang('en', event)">English</button>
+    <button class="lang-btn" onclick="setLang('es', event)">Español</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ENGLISH -->
+  <div class="section active" id="sec-en">
+    <h1>Privacy Policy</h1>
+    <p class="effective">Effective date: May 27, 2026 &nbsp;·&nbsp; Last updated: May 27, 2026</p>
+
+    <div class="highlight">
+      Your privacy matters to us. This Privacy Policy explains what information CertiGo collects, how we use it, and your rights regarding your data.
+    </div>
+
+    <h2>1. Who We Are</h2>
+    <p>CertiGo is a home services marketplace operated by an independent developer based in Texas, United States. If you have any questions about this Privacy Policy, contact us at <a href="mailto:bash.tammuz@gmail.com">bash.tammuz@gmail.com</a>.</p>
+
+    <h2>2. Information We Collect</h2>
+    <p>We collect the following types of information:</p>
+    <ul>
+      <li><strong>Account information:</strong> name, email address, and password when you register.</li>
+      <li><strong>Profile information:</strong> your name, profile photo, and bio if you choose to provide them.</li>
+      <li><strong>Location data:</strong> your approximate or precise location to show you nearby service providers. We collect this only when you use the app and with your permission.</li>
+      <li><strong>Usage data:</strong> information about how you interact with the app, such as pages viewed and actions taken.</li>
+      <li><strong>Communications:</strong> messages or support requests you send us.</li>
+      <li><strong>Payment information:</strong> payment transactions are processed by third-party providers. We do not store your full card details.</li>
+      <li><strong>Google Sign-In data:</strong> if you use Google to log in, we receive your name and email address from Google.</li>
+    </ul>
+
+    <h2>3. How We Use Your Information</h2>
+    <p>We use your information to:</p>
+    <ul>
+      <li>Create and manage your account.</li>
+      <li>Connect you with nearby service providers based on your location.</li>
+      <li>Process bookings and payments.</li>
+      <li>Send you service-related notifications and updates.</li>
+      <li>Respond to your support requests.</li>
+      <li>Improve and maintain the platform.</li>
+      <li>Comply with legal obligations.</li>
+    </ul>
+
+    <h2>4. Location Data</h2>
+    <p>CertiGo uses your device's location to show you relevant service providers in your area. We request location permission through your device's operating system. You can deny or revoke this permission at any time in your device settings, though some features may not work without it.</p>
+    <p>We do not sell or share your precise location with third parties except as necessary to provide the service (e.g., showing your location to a Provider you have booked).</p>
+
+    <h2>5. Sharing Your Information</h2>
+    <p>We do not sell your personal information. We may share your information with:</p>
+    <ul>
+      <li><strong>Service Providers:</strong> limited profile information is shared with Providers when you book a service.</li>
+      <li><strong>Payment processors:</strong> to complete transactions.</li>
+      <li><strong>Google:</strong> if you use Google Sign-In, subject to Google's Privacy Policy.</li>
+      <li><strong>Legal authorities:</strong> if required by law or to protect the rights and safety of users.</li>
+    </ul>
+
+    <h2>6. Data Retention</h2>
+    <p>We retain your personal information for as long as your account is active or as needed to provide services. You may request deletion of your account and data at any time by contacting us at <a href="mailto:bash.tammuz@gmail.com">bash.tammuz@gmail.com</a>.</p>
+
+    <h2>7. Security</h2>
+    <p>We take reasonable measures to protect your information from unauthorized access, disclosure, or loss. However, no method of transmission over the internet is 100% secure, and we cannot guarantee absolute security.</p>
+
+    <h2>8. Children's Privacy</h2>
+    <p>CertiGo is not intended for use by anyone under the age of 18. We do not knowingly collect personal information from children. If you believe a child has provided us with personal information, please contact us and we will delete it promptly.</p>
+
+    <h2>9. Your Rights</h2>
+    <p>Depending on your location, you may have the right to:</p>
+    <ul>
+      <li>Access the personal information we hold about you.</li>
+      <li>Request correction of inaccurate data.</li>
+      <li>Request deletion of your data.</li>
+      <li>Withdraw consent for location access at any time via device settings.</li>
+    </ul>
+    <p>To exercise these rights, contact us at <a href="mailto:bash.tammuz@gmail.com">bash.tammuz@gmail.com</a>.</p>
+
+    <h2>10. Third-Party Services</h2>
+    <p>CertiGo uses the following third-party services that have their own privacy policies:</p>
+    <ul>
+      <li>Google OAuth (authentication)</li>
+      <li>Google AdMob (advertising)</li>
+      <li>Stripe (payment processing)</li>
+      <li>Neon / PostgreSQL (database hosting)</li>
+      <li>Railway (app hosting)</li>
+    </ul>
+    <p>We encourage you to review the privacy policies of these services.</p>
+
+    <h2>11. Advertising</h2>
+    <p>CertiGo displays ads through Google AdMob. AdMob may use your device's advertising ID and other data to serve personalized ads. You can opt out of personalized advertising in your device settings.</p>
+
+    <h2>12. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. We will notify you of significant changes via the app or email. Your continued use of CertiGo after changes constitutes your acceptance of the updated policy.</p>
+
+    <h2>13. Contact Us</h2>
+    <p>If you have questions or concerns about this Privacy Policy, please contact:<br>
+    <a href="mailto:bash.tammuz@gmail.com">bash.tammuz@gmail.com</a></p>
+  </div>
+
+  <!-- ESPAÑOL -->
+  <div class="section" id="sec-es">
+    <h1>Política de Privacidad</h1>
+    <p class="effective">Fecha de vigencia: 27 de mayo de 2026 &nbsp;·&nbsp; Última actualización: 27 de mayo de 2026</p>
+
+    <div class="highlight">
+      Tu privacidad es importante para nosotros. Esta Política de Privacidad explica qué información recopila CertiGo, cómo la usamos y tus derechos sobre tus datos.
+    </div>
+
+    <h2>1. Quiénes Somos</h2>
+    <p>CertiGo es un marketplace de servicios a domicilio operado por un desarrollador independiente con sede en Texas, Estados Unidos. Si tienes preguntas sobre esta Política de Privacidad, contáctanos en <a href="mailto:bash.tammuz@gmail.com">bash.tammuz@gmail.com</a>.</p>
+
+    <h2>2. Información que Recopilamos</h2>
+    <p>Recopilamos los siguientes tipos de información:</p>
+    <ul>
+      <li><strong>Información de cuenta:</strong> nombre, correo electrónico y contraseña al registrarte.</li>
+      <li><strong>Información de perfil:</strong> tu nombre, foto de perfil y biografía si decides proporcionarlos.</li>
+      <li><strong>Datos de ubicación:</strong> tu ubicación aproximada o precisa para mostrarte proveedores de servicios cercanos. La recopilamos solo cuando usas la app y con tu permiso.</li>
+      <li><strong>Datos de uso:</strong> información sobre cómo interactúas con la app.</li>
+      <li><strong>Comunicaciones:</strong> mensajes o solicitudes de soporte que nos envíes.</li>
+      <li><strong>Información de pago:</strong> las transacciones son procesadas por terceros. No almacenamos los datos completos de tu tarjeta.</li>
+      <li><strong>Datos de Google:</strong> si usas Google para iniciar sesión, recibimos tu nombre y correo electrónico de Google.</li>
+    </ul>
+
+    <h2>3. Cómo Usamos tu Información</h2>
+    <p>Usamos tu información para:</p>
+    <ul>
+      <li>Crear y gestionar tu cuenta.</li>
+      <li>Conectarte con proveedores de servicios cercanos según tu ubicación.</li>
+      <li>Procesar reservas y pagos.</li>
+      <li>Enviarte notificaciones y actualizaciones del servicio.</li>
+      <li>Responder a tus solicitudes de soporte.</li>
+      <li>Mejorar y mantener la plataforma.</li>
+      <li>Cumplir con obligaciones legales.</li>
+    </ul>
+
+    <h2>4. Datos de Ubicación</h2>
+    <p>CertiGo usa la ubicación de tu dispositivo para mostrarte proveedores de servicios relevantes en tu área. Solicitamos el permiso de ubicación a través del sistema operativo de tu dispositivo. Puedes negar o revocar este permiso en cualquier momento en la configuración de tu dispositivo, aunque algunas funciones pueden no estar disponibles sin él.</p>
+    <p>No vendemos ni compartimos tu ubicación precisa con terceros, excepto cuando sea necesario para prestar el servicio (por ejemplo, mostrar tu ubicación a un Proveedor que hayas contratado).</p>
+
+    <h2>5. Compartir tu Información</h2>
+    <p>No vendemos tu información personal. Podemos compartir tu información con:</p>
+    <ul>
+      <li><strong>Proveedores de servicios:</strong> se comparte información limitada del perfil cuando contratas un servicio.</li>
+      <li><strong>Procesadores de pago:</strong> para completar transacciones.</li>
+      <li><strong>Google:</strong> si usas Google para iniciar sesión, sujeto a la Política de Privacidad de Google.</li>
+      <li><strong>Autoridades legales:</strong> si lo exige la ley o para proteger los derechos y la seguridad de los usuarios.</li>
+    </ul>
+
+    <h2>6. Retención de Datos</h2>
+    <p>Conservamos tu información personal mientras tu cuenta esté activa o sea necesario para prestar los servicios. Puedes solicitar la eliminación de tu cuenta y tus datos en cualquier momento contactándonos en <a href="mailto:bash.tammuz@gmail.com">bash.tammuz@gmail.com</a>.</p>
+
+    <h2>7. Seguridad</h2>
+    <p>Tomamos medidas razonables para proteger tu información contra acceso no autorizado, divulgación o pérdida. Sin embargo, ningún método de transmisión por internet es 100% seguro.</p>
+
+    <h2>8. Privacidad de Menores</h2>
+    <p>CertiGo no está destinado a personas menores de 18 años. No recopilamos conscientemente información personal de menores. Si crees que un menor nos ha proporcionado información personal, contáctanos y la eliminaremos de inmediato.</p>
+
+    <h2>9. Tus Derechos</h2>
+    <p>Dependiendo de tu ubicación, puedes tener derecho a:</p>
+    <ul>
+      <li>Acceder a la información personal que tenemos sobre ti.</li>
+      <li>Solicitar la corrección de datos inexactos.</li>
+      <li>Solicitar la eliminación de tus datos.</li>
+      <li>Retirar el consentimiento para el acceso a la ubicación en cualquier momento.</li>
+    </ul>
+    <p>Para ejercer estos derechos, contáctanos en <a href="mailto:bash.tammuz@gmail.com">bash.tammuz@gmail.com</a>.</p>
+
+    <h2>10. Servicios de Terceros</h2>
+    <p>CertiGo utiliza los siguientes servicios de terceros que tienen sus propias políticas de privacidad:</p>
+    <ul>
+      <li>Google OAuth (autenticación)</li>
+      <li>Google AdMob (publicidad)</li>
+      <li>Stripe (procesamiento de pagos)</li>
+      <li>Neon / PostgreSQL (base de datos)</li>
+      <li>Railway (hospedaje de la app)</li>
+    </ul>
+
+    <h2>11. Publicidad</h2>
+    <p>CertiGo muestra anuncios a través de Google AdMob. AdMob puede usar el ID publicitario de tu dispositivo para mostrar anuncios personalizados. Puedes desactivar la publicidad personalizada en la configuración de tu dispositivo.</p>
+
+    <h2>12. Cambios a Esta Política</h2>
+    <p>Podemos actualizar esta Política de Privacidad en cualquier momento. Te notificaremos sobre cambios significativos a través de la app o por correo electrónico. Tu uso continuado de CertiGo después de los cambios constituye tu aceptación de la política actualizada.</p>
+
+    <h2>13. Contáctanos</h2>
+    <p>Si tienes preguntas o inquietudes sobre esta Política de Privacidad, contáctanos en:<br>
+    <a href="mailto:bash.tammuz@gmail.com">bash.tammuz@gmail.com</a></p>
+  </div>
+
+</div>
+
+<footer>
+  &copy; 2026 CertiGo · All rights reserved / Todos los derechos reservados<br>
+  <a href="mailto:bash.tammuz@gmail.com">bash.tammuz@gmail.com</a>
+</footer>
+
+<script>
+function setLang(lang, e) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-' + lang).classList.add('active');
+  e.target.classList.add('active');
+}
+</script>
+</body>
+</html>
