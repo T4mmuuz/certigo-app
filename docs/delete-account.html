@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Eliminar Cuenta — CertiGo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --red: #D72638;
+      --dark: #111111;
+      --gray: #444;
+      --light: #f5f5f5;
+      --border: #e0e0e0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--light);
+      color: var(--dark);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-box {
+      width: 36px;
+      height: 36px;
+      background: var(--red);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-box svg { width: 20px; height: 20px; fill: white; }
+
+    header span {
+      font-family: 'Sora', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    header span b { color: var(--red); }
+
+    main {
+      flex: 1;
+      max-width: 600px;
+      margin: 48px auto;
+      padding: 0 24px;
+      width: 100%;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      padding: 40px;
+    }
+
+    .icon-wrap {
+      width: 56px;
+      height: 56px;
+      background: #fdecea;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .icon-wrap svg { width: 28px; height: 28px; stroke: var(--red); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    h1 {
+      font-family: 'Sora', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      color: var(--gray);
+      font-size: 0.95rem;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    .steps {
+      background: var(--light);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 32px;
+    }
+
+    .steps h2 {
+      font-family: 'Sora', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--gray);
+      margin-bottom: 16px;
+    }
+
+    .step {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .step:last-child { margin-bottom: 0; }
+
+    .step-num {
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      background: var(--red);
+      color: white;
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .step p { font-size: 0.9rem; line-height: 1.5; color: var(--dark); }
+    .step p b { font-weight: 600; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin-bottom: 28px;
+    }
+
+    .email-block h2 {
+      font-family: 'Sora', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .email-block p {
+      font-size: 0.9rem;
+      color: var(--gray);
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+
+    .email-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--red);
+      color: white;
+      text-decoration: none;
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 12px 24px;
+      border-radius: 10px;
+      transition: opacity 0.2s;
+    }
+
+    .email-btn:hover { opacity: 0.88; }
+    .email-btn svg { width: 16px; height: 16px; stroke: white; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    .notice {
+      margin-top: 24px;
+      background: #fffbea;
+      border: 1px solid #f5e08a;
+      border-radius: 10px;
+      padding: 16px 18px;
+      font-size: 0.85rem;
+      color: #7a6000;
+      line-height: 1.6;
+    }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-box">
+    <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+  </div>
+  <span>Certi<b>Go</b></span>
+</header>
+
+<main>
+  <div class="card">
+
+    <div class="icon-wrap">
+      <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+    </div>
+
+    <h1>Eliminar tu cuenta</h1>
+    <p class="subtitle">Puedes solicitar la eliminación de tu cuenta y todos tus datos personales en cualquier momento. El proceso es permanente e irreversible.</p>
+
+    <div class="steps">
+      <h2>Opciones para eliminar tu cuenta</h2>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <p><b>Desde la app:</b> Ve a tu perfil → Configuración → "Delete Account" y confirma la eliminación.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <p><b>Por correo:</b> Si no puedes acceder a tu cuenta, envíanos un email a la dirección de abajo con el asunto "Eliminar cuenta" y tu email registrado.</p>
+      </div>
+    </div>
+
+    <hr class="divider"/>
+
+    <div class="email-block">
+      <h2>Solicitar eliminación por correo</h2>
+      <p>Responderemos en un plazo máximo de <b>7 días hábiles</b>. Una vez eliminada la cuenta, todos tus datos serán borrados permanentemente de nuestros servidores.</p>
+      <a class="email-btn" href="mailto:bash.tammuz@gmail.com?subject=Eliminar%20cuenta%20CertiGo&body=Hola%2C%20quiero%20eliminar%20mi%20cuenta%20de%20CertiGo.%0A%0AEmail%20registrado%3A%20">
+        <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Enviar solicitud
+      </a>
+    </div>
+
+    <div class="notice">
+      ⚠️ La eliminación de cuenta es <b>permanente</b>. Se borrarán tu perfil, historial de servicios y todos los datos asociados. Esta acción no se puede deshacer.
+    </div>
+
+  </div>
+</main>
+
+<footer>© 2026 CertiGo. Todos los derechos reservados.</footer>
+
+</body>
+</html>
