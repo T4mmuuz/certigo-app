@@ -1,4 +1,4 @@
-import { useRoute, useLocation } from "wouter";
+﻿import { useRoute, useLocation } from "wouter";
 import { useService } from "@/hooks/use-services";
 import { useCreateBooking } from "@/hooks/use-bookings";
 import { Navbar } from "@/components/Navbar";
@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { Star, MapPin, CheckCircle2, ShieldCheck, Clock, Loader2, DollarSign, Zap, Briefcase, Users, Timer, BadgeCheck, MessageSquare, ChevronLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
+import { PaymentOptionsDialog } from "@/components/PaymentOptionsDialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -34,15 +35,15 @@ const JOB_SIZE_OPTIONS = [
 ];
 
 const URGENCY_OPTIONS = [
-  { value: "flexible", label: "Flexible — Any time works" },
+  { value: "flexible", label: "Flexible â€” Any time works" },
   { value: "today", label: "Today" },
-  { value: "asap", label: "ASAP — Within hours" },
-  { value: "emergency", label: "Emergency — Right now" },
+  { value: "asap", label: "ASAP â€” Within hours" },
+  { value: "emergency", label: "Emergency â€” Right now" },
 ];
 
 const DURATION_OPTIONS = [
   { value: "under_1hr", label: "Less than 1 hour" },
-  { value: "1_3hrs", label: "1–3 hours" },
+  { value: "1_3hrs", label: "1â€“3 hours" },
   { value: "half_day", label: "Half day" },
   { value: "full_day", label: "Full day" },
   { value: "multi_day", label: "Multi-day" },
@@ -63,6 +64,8 @@ export default function ServiceDetails() {
   const [wizardStep, setWizardStep] = useState(1);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
   // Form state
   const [jobDescription, setJobDescription] = useState("");
@@ -131,7 +134,7 @@ export default function ServiceDetails() {
         customerId: user.id,
         date,
         status: "pending",
-        paymentMethod: "cash",
+        paymentMethod: paymentMethod as any,
         jobDescription: jobDescription || undefined,
         estimatedBudget: estimatedBudget || undefined,
         jobSize: jobSize as any,
@@ -201,7 +204,16 @@ export default function ServiceDetails() {
               </div>
             </Card>
 
-            {/* Trust Badges — real data only */}
+            {/* Photo Gallery */}
+            {(service as any).photos && (service as any).photos.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {(service as any).photos.map((url: string, i: number) => (
+                  <img key={i} src={url} alt={"photo " + i} className={"w-full object-cover rounded-lg " + (i === 0 ? "col-span-2 h-48" : "h-32")} />
+                ))}
+              </div>
+            )}
+
+                        {/* Trust Badges â€” real data only */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div className="bg-card border border-border rounded-xl p-3 text-center">
                 <Briefcase className="w-5 h-5 mx-auto mb-1 text-primary" />
@@ -499,10 +511,7 @@ export default function ServiceDetails() {
                             </Button>
                           ) : (
                             <Button
-                              onClick={handleSubmitRequest}
-                              className="flex-1 gap-1"
-                              disabled={isProcessing}
-                              data-testid="button-send-request"
+                              onClick={() => setShowPaymentDialog(true)}
                             >
                               {isProcessing ? (
                                 <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>
@@ -554,8 +563,20 @@ export default function ServiceDetails() {
                   </DialogContent>
                 </Dialog>
 
+      <PaymentOptionsDialog
+        open={showPaymentDialog}
+        onOpenChange={setShowPaymentDialog}
+        serviceName={service.title}
+        totalAmount={service.price}
+        onSelectPayment={(method) => {
+          setPaymentMethod(method);
+          setShowPaymentDialog(false);
+          handleSubmitRequest();
+        }}
+      />
+
                 <p className="text-xs text-center text-muted-foreground mt-4">
-                  {t("service.free")} — agree on price with provider before work begins.
+                  {t("service.free")} â€” agree on price with provider before work begins.
                 </p>
               </Card>
             </div>
@@ -566,3 +587,5 @@ export default function ServiceDetails() {
     </div>
   );
 }
+
+

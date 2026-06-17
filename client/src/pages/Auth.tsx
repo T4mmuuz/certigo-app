@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
@@ -21,6 +22,9 @@ export default function AuthPage() {
   const { t } = useLanguage();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [showRegConfirmPassword, setShowRegConfirmPassword] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
@@ -36,6 +40,7 @@ export default function AuthPage() {
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
   const [regRole, setRegRole] = useState<"customer" | "provider">("customer");
   const [regBio, setRegBio] = useState("");
+  const [regCity, setRegCity] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +63,7 @@ export default function AuthPage() {
         name: regName,
         role: regRole,
         bio: regBio,
+        city: regCity,
         // Default location: Houston, TX with slight random offset
         lat: 29.7604 + (Math.random() * 0.05 - 0.025),
         lng: -95.3698 + (Math.random() * 0.05 - 0.025),
@@ -220,7 +226,6 @@ export default function AuthPage() {
                       <p className="text-xs text-destructive">{t("auth.passwordMismatch")}</p>
                     )}
                   </div>
-
                   <div className="space-y-3">
                     <Label>{t("auth.iWantTo")}</Label>
                     <RadioGroup
@@ -266,6 +271,16 @@ export default function AuthPage() {
                     </div>
                   )}
 
+                                    <div className="space-y-2">
+                    <Label htmlFor="reg-city">City</Label>
+                    <Input
+                      id="reg-city"
+                      placeholder="e.g. Houston, TX"
+                      value={regCity}
+                      onChange={(e) => setRegCity(e.target.value)}
+                      data-testid="input-reg-city"
+                    />
+                  </div>
                   <Button
                     type="submit"
                     className="w-full h-12 text-base font-semibold"
@@ -353,7 +368,7 @@ function SocialLoginSection({ onSelect, t }: { onSelect: (p: string) => void; t:
       </div>
       <button
         type="button"
-        onClick={() => onSelect("Google")}
+        onClick={() => { window.location.href = "/auth/google"; }}
         data-testid="button-google-login"
         className="w-full flex items-center justify-center gap-3 h-11 rounded-xl border-2 border-border bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors text-sm font-medium text-gray-800 dark:text-gray-200"
       >

@@ -1,4 +1,4 @@
-import { Navbar } from "@/components/Navbar";
+﻿import { Navbar } from "@/components/Navbar";
 import { useAuth } from "@/hooks/use-auth";
 import { useCreateService, useServices } from "@/hooks/use-services";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,13 @@ import { apiRequest } from "@/lib/queryClient";
 export default function Profile() {
   const { user, logout } = useAuth();
   const { data: services } = useServices();
+  const [editingService, setEditingService] = useState<any>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [isSavingService, setIsSavingService] = useState(false);
+  const { data: myReviews = [] } = useQuery({ queryKey: ["/api/reviews/my"], queryFn: async () => { const res = await fetch("/api/reviews/my"); if (!res.ok) return []; return res.json(); } });
   const { mutateAsync: createService, isPending } = useCreateService();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -26,6 +33,27 @@ export default function Profile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editCity, setEditCity] = useState("");
+
+  const updateProfile = useMutation({
+    mutationFn: async (data: { name: string; username: string; city?: string }) => {
+      const res = await apiRequest("PATCH", "/api/users/profile", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
+      setIsEditProfileOpen(false);
+      toast({ title: "Profile updated!" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to update profile", variant: "destructive" });
+    },
+  });
 
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
@@ -47,6 +75,7 @@ export default function Profile() {
     mutationFn: () => apiRequest("POST", "/api/users/generate-referral-code"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
     },
   });
 
@@ -93,6 +122,25 @@ export default function Profile() {
 
   const myServices = services?.filter(s => s.providerId === user.id) || [];
 
+  const handleEditService = async () => {
+    if (!editingService) return;
+    setIsSavingService(true);
+    try {
+      const res = await fetch("/api/services/" + editingService.id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editTitle, description: editDesc, price: editPrice, category: editCategory }),
+      });
+      if (!res.ok) throw new Error("Failed to update service");
+      queryClient.invalidateQueries({ queryKey: ["/api/services"] });
+      setEditingService(null);
+      toast({ title: "Service updated!" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setIsSavingService(false);
+    }
+  };
   const handleCreateService = async () => {
     try {
       await createService({
@@ -128,37 +176,28 @@ export default function Profile() {
     }
 
     setIsUploading(true);
-    try {
-      const urlResponse = await fetch("/api/uploads/request-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: file.name,
-          size: file.size,
-          contentType: file.type,
-        }),
-      });
-
-      if (!urlResponse.ok) throw new Error("Failed to get upload URL");
-      const { uploadURL, objectPath } = await urlResponse.json();
-
-      await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type },
-      });
-
-      const updateResponse = await apiRequest("PATCH", "/api/users/profile-picture", { objectPath });
-      
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Profile picture updated!" });
-    } catch (error) {
-      console.error("Upload error:", error);
-      toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64 = reader.result;
+        const res = await fetch("/api/users/profile-picture-upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ base64 }),
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("Upload failed");
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
+        toast({ title: "Profile picture updated!" });
+      } catch (e) {
+        toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
+      } finally {
+        setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const copyReferralCode = () => {
@@ -171,6 +210,62 @@ export default function Profile() {
   };
 
   return (
+    <>
+    <Dialog open={!!editingService} onOpenChange={(o) => { if (!o) setEditingService(null); }}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit Service</DialogTitle></DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2"><Label>Title</Label><Input value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Description</Label><Textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Price</Label><Input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Category</Label><Input value={editCategory} onChange={e => setEditCategory(e.target.value)} /></div>
+        </div>
+        {/* Photo upload section */}
+        {editingService && (
+          <div className="space-y-2">
+            <Label>Photos ({((editingService.photos || []).length)}/5)</Label>
+            <div className="flex gap-2 flex-wrap">
+              {(editingService.photos || []).map((url: string, i: number) => (
+                <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border">
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  <button type="button" onClick={async () => {
+                    const res = await fetch("/api/services/" + editingService.id + "/photos", { method: "DELETE", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ url }) });
+                    const data = await res.json();
+                    setEditingService((s: any) => ({ ...s, photos: data.photos }));
+                    queryClient.invalidateQueries({ queryKey: ["/api/services"] });
+                  }} className="absolute top-0.5 right-0.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center">×</button>
+                </div>
+              ))}
+              {(editingService.photos || []).length < 5 && (
+                <label className="w-20 h-20 border-2 border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary text-muted-foreground hover:text-primary transition-colors">
+                  <span className="text-2xl">+</span>
+                  <span className="text-[10px]">Add photo</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 5 * 1024 * 1024) { alert("Max 5MB per photo"); return; }
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                      const base64 = reader.result as string;
+                      const res = await fetch("/api/services/" + editingService.id + "/photos", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ base64 }) });
+                      if (!res.ok) { const d = await res.json(); alert(d.message); return; }
+                      const data = await res.json();
+                      setEditingService((s: any) => ({ ...s, photos: data.photos }));
+                      queryClient.invalidateQueries({ queryKey: ["/api/services"] });
+                    };
+                    reader.readAsDataURL(file);
+                  }} />
+                </label>
+              )}
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditingService(null)}>Cancel</Button>
+          <Button onClick={handleEditService} disabled={isSavingService}>{isSavingService ? "Saving..." : "Save Changes"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     <div className="min-h-screen bg-background">
       <Navbar />
       
@@ -225,60 +320,6 @@ export default function Profile() {
                   Sign Out
                 </Button>
               </div>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Gift className="w-4 h-4" /> Referral Program
-                </CardTitle>
-                <CardDescription>Earn $5 for each friend who completes a booking</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {user.referralCode ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Input 
-                        value={user.referralCode} 
-                        readOnly 
-                        className="font-mono text-center"
-                        data-testid="input-referral-code"
-                      />
-                      <Button 
-                        size="icon" 
-                        variant="outline" 
-                        onClick={copyReferralCode}
-                        data-testid="button-copy-code"
-                      >
-                        {codeCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                    {referralStats && (
-                      <div className="grid grid-cols-2 gap-2 text-center">
-                        <div className="p-2 bg-muted rounded-md">
-                          <p className="text-lg font-bold" data-testid="text-total-referrals">{referralStats.totalReferrals}</p>
-                          <p className="text-xs text-muted-foreground">Referrals</p>
-                        </div>
-                        <div className="p-2 bg-muted rounded-md">
-                          <p className="text-lg font-bold text-green-600" data-testid="text-rewards-earned">
-                            ${((referralStats.totalRewardsEarned || 0) / 100).toFixed(2)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Earned</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <Button 
-                    className="w-full" 
-                    onClick={() => generateReferralCode.mutate()}
-                    disabled={generateReferralCode.isPending}
-                    data-testid="button-generate-code"
-                  >
-                    {generateReferralCode.isPending ? "Generating..." : "Get My Referral Code"}
-                  </Button>
-                )}
-              </CardContent>
             </Card>
 
             <Card>
@@ -369,7 +410,42 @@ export default function Profile() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                 <Button variant="ghost" className="w-full justify-start text-sm h-9">Edit Profile</Button>
+                 <Dialog open={isEditProfileOpen} onOpenChange={(open) => {
+  if (open) { setEditName(user.name); setEditUsername(user.username); }
+  setIsEditProfileOpen(open);
+}}>
+  <DialogTrigger asChild>
+    <Button variant="ghost" className="w-full justify-start text-sm h-9">Edit Profile</Button>
+  </DialogTrigger>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Edit Profile</DialogTitle>
+      <DialogDescription>Update your display name and username.</DialogDescription>
+    </DialogHeader>
+    <div className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label>Name</Label>
+        <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Your name" />
+      </div>
+      <div className="space-y-2">
+        <Label>Username</Label>
+        <Input value={editUsername} onChange={e => setEditUsername(e.target.value)} placeholder="Your username" />
+      </div>
+          <div className="space-y-2">
+        <Label>City</Label>
+        <Input value={editCity} onChange={e => setEditCity(e.target.value)} placeholder="e.g. Houston, TX" />
+      </div>
+    </div>
+    <DialogFooter>
+      <Button
+        onClick={() => updateProfile.mutate({ name: editName, username: editUsername, city: editCity })}
+        disabled={updateProfile.isPending}
+      >
+        {updateProfile.isPending ? "Saving..." : "Save Changes"}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
                  <Button variant="ghost" className="w-full justify-start text-sm h-9">Notifications</Button>
                  <Button variant="ghost" className="w-full justify-start text-sm h-9">Privacy</Button>
               </CardContent>
@@ -422,10 +498,10 @@ export default function Profile() {
                               <SelectValue placeholder="How do you charge?" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="fixed">Fixed Price — set rate per job</SelectItem>
-                              <SelectItem value="negotiable">Negotiable — agree with customer</SelectItem>
-                              <SelectItem value="hourly">Hourly Rate — charged by the hour</SelectItem>
-                              <SelectItem value="free_estimate">Free Estimate — quote first, then decide</SelectItem>
+                              <SelectItem value="fixed">Fixed Price â€” set rate per job</SelectItem>
+                              <SelectItem value="negotiable">Negotiable â€” agree with customer</SelectItem>
+                              <SelectItem value="hourly">Hourly Rate â€” charged by the hour</SelectItem>
+                              <SelectItem value="free_estimate">Free Estimate â€” quote first, then decide</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -459,7 +535,7 @@ export default function Profile() {
                             <span>${service.price}/hr</span>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity invisible group-hover:visible">Edit</Button>
+                        <Button variant="outline" size="sm" onClick={() => { setEditingService(service); setEditTitle(service.title); setEditDesc(service.description); setEditPrice(String(service.price)); setEditCategory(service.category); }}>Edit</Button>
                       </Card>
                     ))}
                   </div>
@@ -477,7 +553,7 @@ export default function Profile() {
                 </Card>
                 <Card className="p-6 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30 border-none">
                   <h3 className="font-bold text-lg text-amber-600 dark:text-amber-400 mb-1">Reviews Given</h3>
-                  <p className="text-3xl font-display font-bold text-amber-900 dark:text-amber-300">0</p>
+                  <p className="text-3xl font-display font-bold text-amber-900 dark:text-amber-300">{myReviews.length}</p>
                   <p className="text-xs text-amber-800/60 dark:text-amber-400/60 mt-2">Help the community by reviewing</p>
                 </Card>
               </div>
@@ -487,5 +563,7 @@ export default function Profile() {
         </div>
       </main>
     </div>
+    </>
   );
 }
+

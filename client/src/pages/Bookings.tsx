@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { Navbar } from "@/components/Navbar";
 import { useBookings } from "@/hooks/use-bookings";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -30,7 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
-import { Calendar, Clock, MapPin, Loader2, MessageSquare, X, AlertTriangle, RotateCcw, Star, UserCheck } from "lucide-react";
+import { Calendar, Clock, MapPin, Loader2, MessageSquare, X, AlertTriangle, RotateCcw, Star, UserCheck, CheckCircle, PauseCircle, Wallet } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
@@ -44,11 +44,17 @@ export default function Bookings() {
   const { toast } = useToast();
   const [loadingChatBookingId, setLoadingChatBookingId] = useState<number | null>(null);
   const [cancellingBookingId, setCancellingBookingId] = useState<number | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
   const [rebookingId, setRebookingId] = useState<number | null>(null);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState<number | null>(null);
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackComment, setFeedbackComment] = useState("");
   const [feedbackNoShow, setFeedbackNoShow] = useState(false);
+  const [pauseDialogOpen, setPauseDialogOpen] = useState(null);
+  const [pauseReason, setPauseReason] = useState("");
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
 
   const startChatMutation = useMutation({
     mutationFn: async (bookingId: number) => {
@@ -82,7 +88,8 @@ export default function Bookings() {
     mutationFn: async (bookingId: number) => {
       setCancellingBookingId(bookingId);
       const response = await apiRequest("POST", `/api/bookings/${bookingId}/cancel`, {
-        cancelledBy: user?.role === "provider" ? "provider" : "customer"
+        cancelledBy: user?.role === "provider" ? "provider" : "customer",
+        cancelReason
       });
       return response.json();
     },
@@ -167,6 +174,50 @@ export default function Bookings() {
     },
   });
 
+  const acceptBookingMutation = useMutation({
+    mutationFn: async (bookingId) => {
+      const response = await apiRequest("POST", "/api/bookings/" + bookingId + "/accept", {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({ title: "Job Accepted", description: "The customer has been notified." });
+    },
+    onError: (error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+  });
+
+  const pauseBookingMutation = useMutation({
+    mutationFn: async ({ bookingId, reason }) => {
+      const response = await apiRequest("POST", "/api/bookings/" + bookingId + "/pause", { reason });
+      return response.json();
+    },
+    onSuccess: () => {
+      setPauseDialogOpen(null);
+      setPauseReason("");
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({ title: "Job Paused", description: "The customer has been notified." });
+    },
+    onError: (error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+  });
+
+  const submitReviewMutation = useMutation({
+    mutationFn: async ({ bookingId, rating, comment }) => {
+      const response = await apiRequest("POST", "/api/reviews", { bookingId, rating, comment });
+      return response.json();
+    },
+    onSuccess: () => {
+      setReviewDialogOpen(null);
+      setReviewRating(5);
+      setReviewComment("");
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({ title: "Review Submitted", description: "Thank you for your feedback!" });
+    },
+    onError: (error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+  });
+
+
   const getStatusColor = (status: string) => {
     switch(status) {
       case 'accepted': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40';
@@ -195,6 +246,50 @@ export default function Bookings() {
 
   const isProvider = user?.role === "provider";
 
+  // Provider location tracking — send every 5 min when has active booking
+  useEffect(() => {
+    if (!isProvider) return;
+    const activeBooking = bookings?.find(b => b.status === 'accepted');
+    if (!activeBooking) return;
+    const sendLocation = () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition((pos) => {
+        fetch('/api/users/location', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          credentials: 'include',
+        }).catch(() => {});
+      });
+    };
+    sendLocation();
+    const interval = setInterval(sendLocation, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [isProvider, bookings]);
+
+  // Customer — poll provider location every 30s for active bookings
+  const [providerLocations, setProviderLocations] = useState<Record<number, {lat:number;lng:number}>>({});
+  useEffect(() => {
+    if (isProvider) return;
+    const activeBookings = bookings?.filter(b => b.status === 'accepted') || [];
+    if (activeBookings.length === 0) return;
+    const poll = async () => {
+      for (const booking of activeBookings) {
+        try {
+          const res = await fetch('/api/bookings/' + booking.id + '/provider-location', { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.lat && data.lng) setProviderLocations(prev => ({ ...prev, [booking.id]: data }));
+          }
+        } catch {}
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 30000);
+    return () => clearInterval(interval);
+  }, [isProvider, bookings]);
+
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -220,6 +315,10 @@ export default function Bookings() {
               const isRebooking = rebookingId === booking.serviceId;
               const showCancelButton = canCancel(booking.status);
               const showRebookButton = booking.status === 'completed' && user?.role === 'customer';
+              const showAcceptButton = isProvider && booking.status === 'pending';
+              const showPauseButton = isProvider && booking.status === 'accepted';
+              const showCompleteButton = isProvider && booking.status === 'accepted';
+              const canReview = !isProvider && (booking.status === 'completed' || booking.status === 'cancelled');
               
               return (
                 <Card key={booking.id} className="overflow-hidden hover:shadow-md transition-shadow" data-testid={`booking-card-${booking.id}`}>
@@ -232,7 +331,16 @@ export default function Bookings() {
                            <h3 className="text-lg font-bold">{booking.service.title}</h3>
                            <p className="text-sm text-muted-foreground">Booking #{booking.id}</p>
                          </div>
-                         <div className="flex items-center gap-2 flex-wrap">
+                         {isProvider && (booking.jobDescription || booking.urgencyLevel || booking.estimatedBudget) && (
+                        <div className="bg-muted/40 rounded-lg p-3 mb-4 space-y-1 text-sm">
+                          <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wide mb-2">Job Details</p>
+                          {booking.jobDescription && <p><span className="font-medium">Description:</span> {booking.jobDescription}</p>}
+                          {booking.urgencyLevel && <p><span className="font-medium">Urgency:</span> <span className="capitalize">{booking.urgencyLevel}</span></p>}
+                          {booking.estimatedBudget && <p><span className="font-medium">Budget:</span> </p>}
+                          {booking.jobSize && <p><span className="font-medium">Job Size:</span> <span className="capitalize">{booking.jobSize}</span></p>}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
                            <Badge className={`${getStatusColor(booking.status)} border-none capitalize`}>
                              {booking.status.replace('_', ' ')}
                            </Badge>
@@ -256,6 +364,14 @@ export default function Bookings() {
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <MapPin className="w-4 h-4 text-primary" />
                           <span>Service Location</span>
+                        {!isProvider && booking.status === 'accepted' && providerLocations[booking.id] && (
+                          <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-xs font-medium mt-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                            <a href={'https://www.google.com/maps?q='+providerLocations[booking.id].lat+','+providerLocations[booking.id].lng} target="_blank" rel="noopener noreferrer" className="underline">
+                              Provider is on the way — View on Maps
+                            </a>
+                          </div>
+                        )}
                         </div>
                       </div>
 
@@ -290,6 +406,61 @@ export default function Bookings() {
                             )}
                             {isRebooking ? t("common.loading") : "Book Again"}
                           </Button>
+                        )}
+
+                        {showAcceptButton && (
+                          <Button size="sm" onClick={() => acceptBookingMutation.mutate(booking.id)} disabled={acceptBookingMutation.isPending}>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Accept Job
+                          </Button>
+                        )}
+
+                        {showPauseButton && (
+                          <Dialog open={pauseDialogOpen === booking.id} onOpenChange={(open) => { if (open) setPauseDialogOpen(booking.id); else setPauseDialogOpen(null); }}>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm"><PauseCircle className="w-4 h-4 mr-2" />Pause Job</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader><DialogTitle>Pause Job</DialogTitle><DialogDescription>Why are you pausing this job?</DialogDescription></DialogHeader>
+                              <Textarea placeholder="Reason for pausing..." value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} />
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setPauseDialogOpen(null)}>Cancel</Button>
+                                <Button onClick={() => pauseBookingMutation.mutate({ bookingId: booking.id, reason: pauseReason })} disabled={pauseBookingMutation.isPending}>Confirm Pause</Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+
+                        {showCompleteButton && (
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => { if(confirm("Mark this job as finished?")) { apiRequest("POST", "/api/bookings/" + booking.id + "/complete", {}).then(() => { queryClient.invalidateQueries({ queryKey: ["/api/bookings"] }); refetch(); toast({ title: "Job Completed!" }); }); } }}>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Job Finished
+                          </Button>
+                        )}
+
+                        {canReview && (
+                          <Dialog open={reviewDialogOpen === booking.id} onOpenChange={(open) => { if (open) setReviewDialogOpen(booking.id); else setReviewDialogOpen(null); }}>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm"><Star className="w-4 h-4 mr-2" />Leave Review</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader><DialogTitle>Leave a Review</DialogTitle><DialogDescription>How was your experience?</DialogDescription></DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <div className="flex gap-1">
+                                  {[1,2,3,4,5].map((star) => (
+                                    <button key={star} type="button" onClick={() => setReviewRating(star)}>
+                                      <Star className={"w-6 h-6 " + (star <= reviewRating ? "text-amber-500 fill-amber-500" : "text-muted-foreground")} />
+                                    </button>
+                                  ))}
+                                </div>
+                                <Textarea placeholder="Share your experience..." value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} />
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setReviewDialogOpen(null)}>Cancel</Button>
+                                <Button onClick={() => submitReviewMutation.mutate({ bookingId: booking.id, rating: reviewRating, comment: reviewComment })} disabled={submitReviewMutation.isPending}>Submit Review</Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
                         )}
 
                         {/* Rate Customer button for providers on completed bookings */}
@@ -426,6 +597,14 @@ export default function Bookings() {
                                       </p>
                                     )}
                                   </div>
+                                                                  {isProvider && (
+                                    <Textarea
+                                      className="mt-2"
+                                      placeholder="Reason for cancelling..."
+                                      value={cancelReason}
+                                      onChange={(e) => setCancelReason(e.target.value)}
+                                    />
+                                  )}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -462,3 +641,4 @@ export default function Bookings() {
     </div>
   );
 }
+

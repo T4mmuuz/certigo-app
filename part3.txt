@@ -1,0 +1,984 @@
+===STORAGE===
+import { db } from "./db";
+import { users, services, bookings, reviews, transactions, notifications, conversations, messages, servicePackages, referrals, payouts, ads, customerFeedback, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage, type ServicePackage, type InsertServicePackage, type Referral, type InsertReferral, type Payout, type InsertPayout, type Ad, type InsertAd, type CustomerFeedback, type InsertCustomerFeedback } from "@shared/schema";
+import { eq, ilike, or, sql, desc, isNull, and, lte, gte } from "drizzle-orm";
+
+export interface IStorage {
+  // Users
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByReferralCode(referralCode: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+
+  // Services
+  getServices(query?: { category?: string; search?: string }): Promise<(Service & { provider: User })[]>;
+  getService(id: number): Promise<(Service & { provider: User; reviews: Review[] }) | undefined>;
+  createService(service: InsertService): Promise<Service>;
+
+  // Bookings
+  createBooking(booking: InsertBooking): Promise<Booking>;
+  getBookings(userId: number, role: 'customer' | 'provider'): Promise<(Booking & { service: Service })[]>;
+
+  // Reviews
+  createReview(review: InsertReview): Promise<Review>;
+  getReviews(serviceId: number): Promise<Review[]>;
+
+  // Transactions
+  createTransaction(transaction: InsertTransaction): Promise<Transaction>;
+  getTransaction(id: number): Promise<Transaction | undefined>;
+  getTransactionByCheckoutSession(sessionId: string): Promise<Transaction | undefined>;
+  getTransactionByBookingId(bookingId: number): Promise<Transaction | undefined>;
+  updateTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<Transaction>;
+  updateTransactionRefund(id: number, stripeRefundId: string, reason: string): Promise<Transaction>;
+  getPlatformEarnings(): Promise<{ totalEarnings: number; totalTransactions: number; recentTransactions: Transaction[] }>;
+  getProviderEarnings(providerId: number): Promise<{ totalEarnings: number; transactions: Transaction[] }>;
+  updateBookingDepositPaid(bookingId: number): Promise<Booking>;
+  
+  // Booking management
+  getBooking(id: number): Promise<Booking | undefined>;
+  cancelBooking(id: number, cancelledBy: string, cancelReason?: string): Promise<Booking>;
+  updateBookingStatus(id: number, status: string): Promise<Booking>;
+  updateBookingPausedReason(id: number, reason: string): Promise<void>;
+  
+  // Premium
+  updateUserPremium(userId: number, isPremium: boolean, premiumExpiresAt: Date | null, stripeSubscriptionId: string | null): Promise<User>;
+  
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotifications(userId: number): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: number): Promise<number>;
+  markNotificationRead(id: number): Promise<Notification>;
+  markAllNotificationsRead(userId: number): Promise<void>;
+  
+  // Location
+  updateUser(userId: number, data: { name?: string; username?: string; password?: string; city?: string }): Promise<User>;
+  updateUserLocation(userId: number, lat: number, lng: number): Promise<User>;
+  
+  // Chat
+  getOrCreateConversation(bookingId: number, customerId: number, providerId: number): Promise<Conversation>;
+  getConversation(id: number): Promise<Conversation | undefined>;
+  getConversationByBooking(bookingId: number): Promise<Conversation | undefined>;
+  getUserConversations(userId: number): Promise<(Conversation & { otherUser: User; lastMessage: Message | null; unreadCount: number })[]>;
+  getMessages(conversationId: number): Promise<(Message & { sender: User })[]>;
+  createMessage(message: InsertMessage): Promise<Message>;
+  markMessagesRead(conversationId: number, userId: number): Promise<void>;
+  
+  // Profile
+  updateUserProfilePicture(userId: number, profilePicture: string): Promise<User>;
+  updateUserReferralCode(userId: number, referralCode: string): Promise<User>;
+  
+  // Referrals
+  createReferral(referral: InsertReferral): Promise<Referral>;
+  getReferralsByReferrer(referrerId: number): Promise<Referral[]>;
+  getReferralByReferred(referredId: number): Promise<Referral | undefined>;
+  updateReferralStatus(id: number, status: string): Promise<Referral>;
+  
+  // Service Packages
+  createServicePackage(pkg: InsertServicePackage): Promise<ServicePackage>;
+  getServicePackagesByProvider(providerId: number): Promise<ServicePackage[]>;
+  getServicePackage(id: number): Promise<ServicePackage | undefined>;
+  updateServicePackage(id: number, data: Partial<InsertServicePackage>): Promise<ServicePackage>;
+  deleteServicePackage(id: number): Promise<void>;
+  
+  // Payout methods
+  addToReferralBalance(userId: number, amount: number): Promise<User>;
+  deductFromReferralBalance(userId: number, amount: number): Promise<User | null>;
+  updateStripeConnectAccount(userId: number, accountId: string): Promise<User>;
+  createPayout(payout: InsertPayout): Promise<Payout>;
+  getUserPayouts(userId: number): Promise<Payout[]>;
+  updatePayoutStatus(id: number, status: string, transferId?: string, failureReason?: string): Promise<Payout>;
+  
+  // Ads
+  createAd(ad: InsertAd): Promise<Ad>;
+  getActiveAds(placement?: string): Promise<Ad[]>;
+  getAllAds(): Promise<Ad[]>;
+  updateAd(id: number, data: Partial<InsertAd>): Promise<Ad>;
+  deleteAd(id: number): Promise<void>;
+  
+  // Customer Feedback (vendor reviews of customers)
+  createCustomerFeedback(feedback: InsertCustomerFeedback): Promise<CustomerFeedback>;
+  getCustomerFeedback(bookingId: number): Promise<CustomerFeedback | undefined>;
+  getCustomerRating(customerId: number): Promise<{ averageRating: number; totalReviews: number }>;
+}
+
+export class DatabaseStorage implements IStorage {
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserByReferralCode(referralCode: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.referralCode, referralCode));
+    return user;
+  }
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, email));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async getServices(query?: { category?: string; search?: string }): Promise<(Service & { provider: User })[]> {
+    let q = db.select({
+      service: services,
+      provider: users,
+    })
+    .from(services)
+    .innerJoin(users, eq(services.providerId, users.id));
+
+    if (query?.category) {
+      q.where(eq(services.category, query.category));
+    }
+
+    // Simple search implementation
+    if (query?.search) {
+       q.where(
+         or(
+           ilike(services.title, `%${query.search}%`),
+           ilike(services.description, `%${query.search}%`),
+           ilike(services.category, `%${query.search}%`)
+         )
+       );
+    }
+
+    const results = await q;
+    return results.map(r => ({ ...r.service, provider: r.provider }));
+  }
+
+  async getService(id: number): Promise<(Service & { provider: User; reviews: Review[] }) | undefined> {
+    const [result] = await db.select({
+      service: services,
+      provider: users,
+    })
+    .from(services)
+    .innerJoin(users, eq(services.providerId, users.id))
+    .where(eq(services.id, id));
+
+    if (!result) return undefined;
+
+    const serviceReviews = await db.select().from(reviews).where(eq(reviews.serviceId, id));
+
+    return { ...result.service, provider: result.provider, reviews: serviceReviews };
+  }
+
+  async createService(service: InsertService): Promise<Service> {
+    const [newService] = await db.insert(services).values(service).returning();
+    return newService;
+  }
+
+  async createBooking(booking: InsertBooking): Promise<Booking> {
+    const [newBooking] = await db.insert(bookings).values(booking).returning();
+    return newBooking;
+  }
+
+  async getBookings(userId: number, role: 'customer' | 'provider'): Promise<(Booking & { service: Service })[]> {
+    if (role === 'customer') {
+      const results = await db.select({
+        booking: bookings,
+        service: services,
+      })
+      .from(bookings)
+      .innerJoin(services, eq(bookings.serviceId, services.id))
+      .where(eq(bookings.customerId, userId));
+      return results.map(r => ({ ...r.booking, service: r.service }));
+    } else {
+      // For provider, we need to join bookings -> services -> users(provider)
+      // Actually simpler: bookings -> services. where services.providerId = userId
+      const results = await db.select({
+        booking: bookings,
+        service: services,
+      })
+      .from(bookings)
+      .innerJoin(services, eq(bookings.serviceId, services.id))
+      .where(eq(services.providerId, userId));
+      return results.map(r => ({ ...r.booking, service: r.service }));
+    }
+  }
+
+  async createReview(review: InsertReview): Promise<Review> {
+    const [newReview] = await db.insert(reviews).values(review).returning();
+    return newReview;
+  }
+
+  async getReviews(serviceId: number): Promise<Review[]> {
+    return await db.select().from(reviews).where(eq(reviews.serviceId, serviceId));
+  }
+
+  // Transaction methods
+  async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    const [newTransaction] = await db.insert(transactions).values(transaction).returning();
+    return newTransaction;
+  }
+
+  async getTransaction(id: number): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.id, id));
+    return transaction;
+  }
+
+  async getTransactionByCheckoutSession(sessionId: string): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.stripeCheckoutSessionId, sessionId));
+    return transaction;
+  }
+
+  async updateTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<Transaction> {
+    const updateData: any = { status };
+    if (paymentIntentId) {
+      updateData.stripePaymentIntentId = paymentIntentId;
+    }
+    const [updated] = await db.update(transactions).set(updateData).where(eq(transactions.id, id)).returning();
+    return updated;
+  }
+
+  async getPlatformEarnings(): Promise<{ totalEarnings: number; totalTransactions: number; recentTransactions: Transaction[] }> {
+    const completedTransactions = await db.select().from(transactions).where(eq(transactions.status, 'completed')).orderBy(desc(transactions.createdAt));
+    
+    const totalEarnings = completedTransactions.reduce((acc, t) => acc + t.platformFee, 0);
+    
+    return {
+      totalEarnings,
+      totalTransactions: completedTransactions.length,
+      recentTransactions: completedTransactions.slice(0, 20),
+    };
+  }
+
+  async getProviderEarnings(providerId: number): Promise<{ totalEarnings: number; transactions: Transaction[] }> {
+    const providerTransactions = await db.select().from(transactions)
+      .where(eq(transactions.providerId, providerId))
+      .orderBy(desc(transactions.createdAt));
+    
+    const completedTransactions = providerTransactions.filter(t => t.status === 'completed');
+    const totalEarnings = completedTransactions.reduce((acc, t) => acc + t.providerPayout, 0);
+    
+    return {
+      totalEarnings,
+      transactions: providerTransactions,
+    };
+  }
+
+  async updateBookingDepositPaid(bookingId: number): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({ depositPaid: true }).where(eq(bookings.id, bookingId)).returning();
+    return updated;
+  }
+
+  async getTransactionByBookingId(bookingId: number): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.bookingId, bookingId));
+    return transaction;
+  }
+
+  async updateTransactionRefund(id: number, stripeRefundId: string, reason: string): Promise<Transaction> {
+    const [updated] = await db.update(transactions).set({ 
+      status: 'refunded',
+      stripeRefundId,
+      refundReason: reason,
+      refundedAt: new Date(),
+    }).where(eq(transactions.id, id)).returning();
+    return updated;
+  }
+
+  async getBooking(id: number): Promise<Booking | undefined> {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    return booking;
+  }
+
+  async cancelBooking(id: number, cancelledBy: string, cancelReason?: string): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({
+      status: 'cancelled',
+      cancelledBy: cancelledBy as any,
+      cancelledAt: new Date(),
+      cancelReason: cancelReason || null,
+    }).where(eq(bookings.id, id)).returning();
+    return updated;
+  }
+
+  async updateBookingStatus(id: number, status: string): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({ status: status as any }).where(eq(bookings.id, id)).returning();
+    return updated;
+  }
+  async updateBookingPausedReason(id: number, reason: string): Promise<void> {
+    await db.update(bookings).set({ pausedReason: reason }).where(eq(bookings.id, id));
+  }
+
+  async updateUserPremium(userId: number, isPremium: boolean, premiumExpiresAt: Date | null, stripeSubscriptionId: string | null): Promise<User> {
+    const [updated] = await db.update(users).set({ 
+      isPremium,
+      premiumExpiresAt,
+      stripeSubscriptionId,
+    }).where(eq(users.id, userId)).returning();
+    return updated;
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [created] = await db.insert(notifications).values(notification).returning();
+    return created;
+  }
+
+  async getNotifications(userId: number): Promise<Notification[]> {
+    return await db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+  }
+
+  async getUnreadNotificationCount(userId: number): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+    return Number(result[0]?.count || 0);
+  }
+
+  async markNotificationRead(id: number): Promise<Notification> {
+    const [updated] = await db.update(notifications)
+      .set({ readAt: new Date() })
+      .where(eq(notifications.id, id))
+      .returning();
+    return updated;
+  }
+
+  async markAllNotificationsRead(userId: number): Promise<void> {
+    await db.update(notifications)
+      .set({ readAt: new Date() })
+      .where(eq(notifications.userId, userId));
+  }
+
+  async updateUser(userId: number, data: { name?: string; username?: string; password?: string; city?: string }): Promise<User> {
+    const [updated] = await db.update(users)
+      .set(data)
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async updateUserLocation(userId: number, lat: number, lng: number): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ lat, lng })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  // Chat methods
+  async getOrCreateConversation(bookingId: number, customerId: number, providerId: number): Promise<Conversation> {
+    const existing = await db.select().from(conversations).where(eq(conversations.bookingId, bookingId));
+    if (existing.length > 0) return existing[0];
+    
+    const [created] = await db.insert(conversations).values({
+      bookingId,
+      customerId,
+      providerId,
+    }).returning();
+    return created;
+  }
+
+  async getConversation(id: number): Promise<Conversation | undefined> {
+    const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
+    return conv;
+  }
+
+  async getConversationByBooking(bookingId: number): Promise<Conversation | undefined> {
+    const [conv] = await db.select().from(conversations).where(eq(conversations.bookingId, bookingId));
+    return conv;
+  }
+
+  async getUserConversations(userId: number): Promise<(Conversation & { otherUser: User; lastMessage: Message | null; unreadCount: number })[]> {
+    const convs = await db.select().from(conversations)
+      .where(or(eq(conversations.customerId, userId), eq(conversations.providerId, userId)))
+      .orderBy(desc(conversations.createdAt));
+    
+    const results = await Promise.all(convs.map(async (conv) => {
+      const otherUserId = conv.customerId === userId ? conv.providerId : conv.customerId;
+      const [otherUser] = await db.select().from(users).where(eq(users.id, otherUserId));
+      
+      const msgs = await db.select().from(messages)
+        .where(eq(messages.conversationId, conv.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+      
+      const unreadResult = await db.select({ count: sql<number>`count(*)` })
+        .from(messages)
+        .where(and(
+          eq(messages.conversationId, conv.id),
+          isNull(messages.readAt),
+          sql`${messages.senderId} != ${userId}`
+        ));
+      
+      return {
+        ...conv,
+        otherUser,
+        lastMessage: msgs[0] || null,
+        unreadCount: Number(unreadResult[0]?.count || 0),
+      };
+    }));
+    
+    return results;
+  }
+
+  async getMessages(conversationId: number): Promise<(Message & { sender: User })[]> {
+    const msgs = await db.select({
+      message: messages,
+      sender: users,
+    })
+    .from(messages)
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(messages.createdAt);
+    
+    return msgs.map(m => ({ ...m.message, sender: m.sender }));
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const [created] = await db.insert(messages).values(message).returning();
+    return created;
+  }
+
+  async markMessagesRead(conversationId: number, userId: number): Promise<void> {
+    await db.update(messages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(messages.conversationId, conversationId),
+        sql`${messages.senderId} != ${userId}`,
+        isNull(messages.readAt)
+      ));
+  }
+
+  // Profile methods
+  async updateUserProfilePicture(userId: number, profilePicture: string): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ profilePicture })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async updateUserReferralCode(userId: number, referralCode: string): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ referralCode })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  // Referral methods
+  async createReferral(referral: InsertReferral): Promise<Referral> {
+    const [created] = await db.insert(referrals).values(referral).returning();
+    return created;
+  }
+
+  async getReferralsByReferrer(referrerId: number): Promise<Referral[]> {
+    return db.select().from(referrals).where(eq(referrals.referrerId, referrerId));
+  }
+
+  async getReferralByReferred(referredId: number): Promise<Referral | undefined> {
+    const [referral] = await db.select().from(referrals).where(eq(referrals.referredId, referredId));
+    return referral;
+  }
+
+  async updateReferralStatus(id: number, status: string): Promise<Referral> {
+    const updates: any = { status };
+    if (status === "completed") updates.completedAt = new Date();
+    if (status === "rewarded") updates.rewardedAt = new Date();
+    const [updated] = await db.update(referrals).set(updates).where(eq(referrals.id, id)).returning();
+    return updated;
+  }
+
+  // Service Package methods
+  async createServicePackage(pkg: InsertServicePackage): Promise<ServicePackage> {
+    const [created] = await db.insert(servicePackages).values(pkg).returning();
+    return created;
+  }
+
+  async getServicePackagesByProvider(providerId: number): Promise<ServicePackage[]> {
+    return db.select().from(servicePackages)
+      .where(and(eq(servicePackages.providerId, providerId), eq(servicePackages.isActive, true)));
+  }
+
+  async getServicePackage(id: number): Promise<ServicePackage | undefined> {
+    const [pkg] = await db.select().from(servicePackages).where(eq(servicePackages.id, id));
+    return pkg;
+  }
+
+  async updateServicePackage(id: number, data: Partial<InsertServicePackage>): Promise<ServicePackage> {
+    const [updated] = await db.update(servicePackages).set(data).where(eq(servicePackages.id, id)).returning();
+    return updated;
+  }
+
+  async deleteServicePackage(id: number): Promise<void> {
+    await db.update(servicePackages).set({ isActive: false }).where(eq(servicePackages.id, id));
+  }
+
+  // Payout methods
+  async addToReferralBalance(userId: number, amount: number): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ referralBalance: sql`${users.referralBalance} + ${amount}` })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async deductFromReferralBalance(userId: number, amount: number): Promise<User | null> {
+    // Atomic deduction with balance check to prevent race conditions and negative balance
+    const [updated] = await db.update(users)
+      .set({ referralBalance: sql`${users.referralBalance} - ${amount}` })
+      .where(and(eq(users.id, userId), sql`${users.referralBalance} >= ${amount}`))
+      .returning();
+    return updated || null; // Returns null if balance was insufficient
+  }
+
+  async updateStripeConnectAccount(userId: number, accountId: string): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ stripeConnectAccountId: accountId })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async createPayout(payout: InsertPayout): Promise<Payout> {
+    const [created] = await db.insert(payouts).values(payout).returning();
+    return created;
+  }
+
+  async getUserPayouts(userId: number): Promise<Payout[]> {
+    return db.select().from(payouts)
+      .where(eq(payouts.userId, userId))
+      .orderBy(desc(payouts.createdAt));
+  }
+
+  async updatePayoutStatus(id: number, status: string, transferId?: string, failureReason?: string): Promise<Payout> {
+    const updates: any = { status };
+    if (transferId) updates.stripeTransferId = transferId;
+    if (failureReason) updates.failureReason = failureReason;
+    if (status === 'completed') updates.completedAt = new Date();
+    const [updated] = await db.update(payouts).set(updates).where(eq(payouts.id, id)).returning();
+    return updated;
+  }
+
+  // Ads methods
+  async createAd(ad: InsertAd): Promise<Ad> {
+    const [created] = await db.insert(ads).values(ad).returning();
+    return created;
+  }
+
+  async getActiveAds(placement?: string): Promise<Ad[]> {
+    const now = new Date();
+    let query = db.select().from(ads).where(
+      and(
+        eq(ads.isActive, true),
+        or(isNull(ads.startsAt), lte(ads.startsAt, now)),
+        or(isNull(ads.endsAt), gte(ads.endsAt, now))
+      )
+    );
+    
+    const result = await query;
+    if (placement) {
+      return result.filter(ad => ad.placement === placement);
+    }
+    return result;
+  }
+
+  async getAllAds(): Promise<Ad[]> {
+    return db.select().from(ads).orderBy(desc(ads.createdAt));
+  }
+
+  async updateAd(id: number, data: Partial<InsertAd>): Promise<Ad> {
+    const [updated] = await db.update(ads).set(data).where(eq(ads.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAd(id: number): Promise<void> {
+    await db.update(ads).set({ isActive: false }).where(eq(ads.id, id));
+  }
+
+  // Customer Feedback methods
+  async createCustomerFeedback(feedback: InsertCustomerFeedback): Promise<CustomerFeedback> {
+    const [created] = await db.insert(customerFeedback).values(feedback).returning();
+    return created;
+  }
+
+  async getCustomerFeedback(bookingId: number): Promise<CustomerFeedback | undefined> {
+    const [feedback] = await db.select().from(customerFeedback).where(eq(customerFeedback.bookingId, bookingId));
+    return feedback;
+  }
+
+  async getCustomerRating(customerId: number): Promise<{ averageRating: number; totalReviews: number }> {
+    const result = await db.select({
+      avgRating: sql<number>`COALESCE(AVG(${customerFeedback.rating}), 0)`,
+      count: sql<number>`COUNT(*)`,
+    }).from(customerFeedback).where(eq(customerFeedback.customerId, customerId));
+    
+    return {
+      averageRating: Number(result[0]?.avgRating) || 0,
+      totalReviews: Number(result[0]?.count) || 0,
+    };
+  }
+}
+
+export const storage = new DatabaseStorage();
+
+
+
+
+===SCHEMA===
+import { pgTable, text, serial, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+import { relations } from "drizzle-orm";
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  name: text("name").notNull(),
+  role: text("role", { enum: ["customer", "provider"] }).default("customer").notNull(),
+  bio: text("bio"),
+  profilePicture: text("profile_picture"),
+  lat: real("lat"),
+  lng: real("lng"),
+  city: text("city"),
+  isPremium: boolean("is_premium").default(false).notNull(),
+  premiumExpiresAt: timestamp("premium_expires_at"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  referralCode: text("referral_code").unique(),
+  referredBy: integer("referred_by"),
+  stripeConnectAccountId: text("stripe_connect_account_id"),
+  referralBalance: integer("referral_balance").default(0).notNull(), // Available balance in cents
+});
+
+export const services = pgTable("services", {
+  id: serial("id").primaryKey(),
+  providerId: integer("provider_id").notNull(),
+  title: text("title").notNull(), // e.g., "Experienced Plumber"
+  description: text("description").notNull(),
+  category: text("category").notNull(), // e.g., "plumbing", "welding"
+  price: integer("price").notNull(), // Base price or starting rate
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  city: text("city"),
+  pricingType: text("pricing_type", { enum: ["fixed", "negotiable", "hourly", "free_estimate"] }).default("negotiable"),
+  responseTime: text("response_time"), // e.g., "Within 1 hour", "Same day"
+});
+
+export const bookings = pgTable("bookings", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").notNull(),
+  serviceId: integer("service_id").notNull(),
+  status: text("status", { enum: ["pending", "accepted", "paused", "completed", "cancelled", "provider_noshow", "customer_noshow"] }).default("pending").notNull(),
+  date: timestamp("date").notNull(),
+  depositPaid: boolean("deposit_paid").default(false).notNull(),
+  paymentMethod: text("payment_method", { enum: ["app", "cash", "paypal"] }).default("app").notNull(),
+  cancelledBy: text("cancelled_by", { enum: ["customer", "provider"] }),
+  cancelledAt: timestamp("cancelled_at"),
+  hours: integer("hours"), // Optional, kept for backward compat
+  // New per-job fields
+  estimatedBudget: text("estimated_budget"), // e.g. "$80-$150" or "80"
+  jobSize: text("job_size", { enum: ["small", "medium", "large", "emergency"] }),
+  estimatedDuration: text("estimated_duration"), // e.g. "1-3 hours", "half day"
+  urgencyLevel: text("urgency_level", { enum: ["flexible", "today", "asap", "emergency"] }).default("flexible"),
+  jobDescription: text("job_description"), // Customer's description of the problem
+  pausedReason: text("paused_reason"),
+  cancelReason: text("cancel_reason"),
+});
+
+export const reviews = pgTable("reviews", {
+  id: serial("id").primaryKey(),
+  serviceId: integer("service_id").notNull(),
+  customerId: integer("customer_id").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const transactions = pgTable("transactions", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull(),
+  customerId: integer("customer_id").notNull(),
+  providerId: integer("provider_id").notNull(),
+  serviceId: integer("service_id").notNull(),
+  amount: integer("amount").notNull(),
+  platformFee: integer("platform_fee").notNull(),
+  providerPayout: integer("provider_payout").notNull(),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  status: text("status", { enum: ["pending", "completed", "refunded", "failed"] }).default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  refundedAt: timestamp("refunded_at"),
+  refundReason: text("refund_reason"),
+  stripeRefundId: text("stripe_refund_id"),
+});
+
+// Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  services: many(services),
+  bookings: many(bookings),
+  reviews: many(reviews),
+}));
+
+export const servicesRelations = relations(services, ({ one, many }) => ({
+  provider: one(users, {
+    fields: [services.providerId],
+    references: [users.id],
+  }),
+  bookings: many(bookings),
+  reviews: many(reviews),
+}));
+
+export const bookingsRelations = relations(bookings, ({ one }) => ({
+  customer: one(users, {
+    fields: [bookings.customerId],
+    references: [users.id],
+  }),
+  service: one(services, {
+    fields: [bookings.serviceId],
+    references: [services.id],
+  }),
+}));
+
+export const reviewsRelations = relations(reviews, ({ one }) => ({
+  customer: one(users, {
+    fields: [reviews.customerId],
+    references: [users.id],
+  }),
+  service: one(services, {
+    fields: [reviews.serviceId],
+    references: [services.id],
+  }),
+}));
+
+export const transactionsRelations = relations(transactions, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [transactions.bookingId],
+    references: [bookings.id],
+  }),
+  customer: one(users, {
+    fields: [transactions.customerId],
+    references: [users.id],
+  }),
+  provider: one(users, {
+    fields: [transactions.providerId],
+    references: [users.id],
+  }),
+  service: one(services, {
+    fields: [transactions.serviceId],
+    references: [services.id],
+  }),
+}));
+
+// Notifications table
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  type: text("type", { 
+    enum: ["booking_new", "booking_confirmed", "booking_cancelled", "booking_completed", "booking_accepted", "booking_paused", "provider_arriving", "provider_arrived", "payment_received", "review_received", "new_message", "referral_reward", "payout_completed"] 
+  }).notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  metadata: text("metadata"), // JSON string for extra data like bookingId, serviceId
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+// Conversations for chat between customer and provider
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().unique(),
+  customerId: integer("customer_id").notNull(),
+  providerId: integer("provider_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull(),
+  senderId: integer("sender_id").notNull(),
+  content: text("content").notNull(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  booking: one(bookings, {
+    fields: [conversations.bookingId],
+    references: [bookings.id],
+  }),
+  customer: one(users, {
+    fields: [conversations.customerId],
+    references: [users.id],
+  }),
+  provider: one(users, {
+    fields: [conversations.providerId],
+    references: [users.id],
+  }),
+  messages: many(messages),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [messages.conversationId],
+    references: [conversations.id],
+  }),
+  sender: one(users, {
+    fields: [messages.senderId],
+    references: [users.id],
+  }),
+}));
+
+// Service packages (bundles of services at discounted rates)
+export const servicePackages = pgTable("service_packages", {
+  id: serial("id").primaryKey(),
+  providerId: integer("provider_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  serviceIds: text("service_ids").notNull(), // JSON array of service IDs
+  totalPrice: integer("total_price").notNull(), // Discounted bundle price in cents
+  originalPrice: integer("original_price").notNull(), // Sum of individual prices
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const servicePackagesRelations = relations(servicePackages, ({ one }) => ({
+  provider: one(users, {
+    fields: [servicePackages.providerId],
+    references: [users.id],
+  }),
+}));
+
+// Referrals tracking
+export const referrals = pgTable("referrals", {
+  id: serial("id").primaryKey(),
+  referrerId: integer("referrer_id").notNull(),
+  referredId: integer("referred_id").notNull(),
+  status: text("status", { enum: ["pending", "completed", "rewarded"] }).default("pending").notNull(),
+  rewardAmount: integer("reward_amount").default(500).notNull(), // $5 reward in cents
+  completedAt: timestamp("completed_at"),
+  rewardedAt: timestamp("rewarded_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const referralsRelations = relations(referrals, ({ one }) => ({
+  referrer: one(users, {
+    fields: [referrals.referrerId],
+    references: [users.id],
+  }),
+  referred: one(users, {
+    fields: [referrals.referredId],
+    references: [users.id],
+  }),
+}));
+
+// Payouts tracking
+export const payouts = pgTable("payouts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: integer("amount").notNull(), // Amount in cents
+  status: text("status", { enum: ["pending", "processing", "completed", "failed"] }).default("pending").notNull(),
+  stripeTransferId: text("stripe_transfer_id"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const payoutsRelations = relations(payouts, ({ one }) => ({
+  user: one(users, {
+    fields: [payouts.userId],
+    references: [users.id],
+  }),
+}));
+
+// Ads for monetization
+export const ads = pgTable("ads", {
+  id: serial("id").primaryKey(),
+  placement: text("placement", { enum: ["home_sidebar", "home_feed", "booking_confirmation", "profile"] }).notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  ctaText: text("cta_text"),
+  ctaUrl: text("cta_url"),
+  imagePath: text("image_path"),
+  isActive: boolean("is_active").default(true).notNull(),
+  startsAt: timestamp("starts_at"),
+  endsAt: timestamp("ends_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Customer feedback (vendor reviews of customers)
+export const customerFeedback = pgTable("customer_feedback", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().unique(),
+  providerId: integer("provider_id").notNull(),
+  customerId: integer("customer_id").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment"),
+  noShow: boolean("no_show").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const customerFeedbackRelations = relations(customerFeedback, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [customerFeedback.bookingId],
+    references: [bookings.id],
+  }),
+  provider: one(users, {
+    fields: [customerFeedback.providerId],
+    references: [users.id],
+  }),
+  customer: one(users, {
+    fields: [customerFeedback.customerId],
+    references: [users.id],
+  }),
+}));
+
+// Schemas
+export const insertUserSchema = createInsertSchema(users).omit({ id: true });
+export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
+export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, depositPaid: true, cancelledAt: true });
+export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
+export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, createdAt: true });
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, readAt: true });
+export const insertConversationSchema = createInsertSchema(conversations).omit({ id: true, createdAt: true });
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, readAt: true });
+export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true });
+export const insertReferralSchema = createInsertSchema(referrals).omit({ id: true, createdAt: true, completedAt: true, rewardedAt: true });
+export const insertPayoutSchema = createInsertSchema(payouts).omit({ id: true, createdAt: true, completedAt: true });
+export const insertAdSchema = createInsertSchema(ads).omit({ id: true, createdAt: true });
+export const insertCustomerFeedbackSchema = createInsertSchema(customerFeedback).omit({ id: true, createdAt: true });
+
+// Types
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Service = typeof services.$inferSelect;
+export type InsertService = z.infer<typeof insertServiceSchema>;
+export type Booking = typeof bookings.$inferSelect;
+export type InsertBooking = z.infer<typeof insertBookingSchema>;
+export type Review = typeof reviews.$inferSelect;
+export type InsertReview = z.infer<typeof insertReviewSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type ServicePackage = typeof servicePackages.$inferSelect;
+export type InsertServicePackage = z.infer<typeof insertServicePackageSchema>;
+export type Referral = typeof referrals.$inferSelect;
+export type InsertReferral = z.infer<typeof insertReferralSchema>;
+export type Payout = typeof payouts.$inferSelect;
+export type InsertPayout = z.infer<typeof insertPayoutSchema>;
+export type Ad = typeof ads.$inferSelect;
+export type InsertAd = z.infer<typeof insertAdSchema>;
+export type CustomerFeedback = typeof customerFeedback.$inferSelect;
+export type InsertCustomerFeedback = z.infer<typeof insertCustomerFeedbackSchema>;

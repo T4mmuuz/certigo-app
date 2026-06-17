@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+﻿import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -15,7 +15,8 @@ import PaymentCancel from "@/pages/PaymentCancel";
 import Earnings from "@/pages/Earnings";
 import Notifications from "@/pages/Notifications";
 import Chat from "@/pages/Chat";
-import Settings from "@/pages/Settings";
+import Settings from "@/pages/Settings"
+import Providers from "@/pages/Providers";
 
 function Router() {
   return (
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/bookings" component={Bookings} />
       <Route path="/profile" component={Profile} />
       <Route path="/settings" component={Settings} />
+      <Route path="/providers" component={Providers} />
       <Route path="/payment/success" component={PaymentSuccess} />
       <Route path="/payment/cancel" component={PaymentCancel} />
       <Route path="/earnings" component={Earnings} />
@@ -52,3 +54,4 @@ function App() {
 }
 
 export default App;
+

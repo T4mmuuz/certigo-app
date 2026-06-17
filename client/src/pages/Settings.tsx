@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import {
   Globe, Moon, Sun, Check, Bell, Shield, HelpCircle,
-  User, Lock, Trash2, Mail, MessageSquare,
+  User, Lock, Trash2, Mail, MessageSquare, Eye , EyeOff ,
   FileText, AlertCircle, ChevronRight, Download
 } from "lucide-react";
 import { useLanguage, LANGUAGES } from "@/contexts/LanguageContext";
@@ -43,6 +43,9 @@ export default function Settings() {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   const handleSaveLanguage = () => {
     setLanguage(pendingLanguage);
@@ -67,7 +70,7 @@ export default function Settings() {
     document.documentElement.style.fontSize = v ? "18px" : "";
   };
 
-  const handleSavePassword = () => {
+  const handleSavePassword = async () => {
     if (newPw !== confirmPw) {
       toast({ title: "Passwords don't match", variant: "destructive" });
       return;
@@ -76,10 +79,21 @@ export default function Settings() {
       toast({ title: "Password too short", description: "At least 6 characters required.", variant: "destructive" });
       return;
     }
-    toast({ title: "Password updated", description: "Your password has been changed successfully." });
-    setShowPasswordDialog(false);
-    setCurrentPw(""); setNewPw(""); setConfirmPw("");
-  };
+    try {
+      const res = await fetch("/api/users/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to change password");
+      toast({ title: "Password updated", description: "Your password has been changed successfully." });
+      setShowPasswordDialog(false);
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+    } catch (err) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
 
   const handleExportData = () => {
     const data = { user: user?.username, exportedAt: new Date().toISOString(), note: "Full data export coming soon." };
@@ -183,7 +197,13 @@ export default function Settings() {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={() => { logout(); setLocation("/"); }}
+                    onClick={async () => {
+                      try {
+                        await fetch("/api/users/account", { method: "DELETE" });
+                      } catch (_) {}
+                      logout();
+                      setLocation("/");
+                    }}
                   >
                     Yes, delete forever
                   </AlertDialogAction>
@@ -347,13 +367,13 @@ export default function Settings() {
               icon={HelpCircle}
               label="Help Center / FAQ"
               sublabel="Browse common questions and answers"
-              onClick={() => toast({ title: "Help Center", description: "Coming soon — we're building the FAQ!" })}
+              onClick={() => window.location.href = "mailto:bash.tammuz@gmail.com?subject=Help Center / FAQ - CertiGo&body=Hi, I need help with..."}
             />
             <LinkRow
               icon={AlertCircle}
               label="Report a Problem"
               sublabel="Tell us what went wrong"
-              onClick={() => toast({ title: "Thanks for reporting", description: "Our team has been notified." })}
+              onClick={() => window.location.href = "mailto:bash.tammuz@gmail.com?subject=Report a Problem - CertiGo&body=Describe the problem you encountered:"}
             />
             <LinkRow
               icon={MessageSquare}
@@ -364,12 +384,12 @@ export default function Settings() {
             <LinkRow
               icon={FileText}
               label="Terms & Conditions"
-              onClick={() => window.open("/terms", "_blank")}
+              onClick={() => window.open("https://t4mmuuz.github.io/certigo-app/terms.html", "_blank")}
             />
             <LinkRow
               icon={Shield}
               label="Privacy Policy"
-              onClick={() => window.open("/privacy", "_blank")}
+              onClick={() => window.open("https://t4mmuuz.github.io/certigo-app/privacy.html", "_blank")}
             />
           </CardContent>
         </Card>
@@ -389,22 +409,30 @@ export default function Settings() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Current Password</Label>
-              <Input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} placeholder="••••••••" data-testid="input-current-password" />
+              <div className="relative">
+                <Input type={showCurrentPw ? "text" : "password"} value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} placeholder="••••••••" data-testid="input-current-password" />
+                <button type="button" className="absolute right-3 top-2.5 text-muted-foreground" onClick={() => setShowCurrentPw(!showCurrentPw)}>
+                  {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>New Password</Label>
-              <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="••••••••" data-testid="input-new-password" />
+              <div className="relative">
+                <Input type={showNewPw ? "text" : "password"} value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="••••••••" data-testid="input-new-password" />
+                <button type="button" className="absolute right-3 top-2.5 text-muted-foreground" onClick={() => setShowNewPw(!showNewPw)}>
+                  {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Confirm New Password</Label>
-              <Input
-                type="password"
-                value={confirmPw}
-                onChange={(e) => setConfirmPw(e.target.value)}
-                placeholder="••••••••"
-                className={confirmPw && confirmPw !== newPw ? "border-destructive" : ""}
-                data-testid="input-confirm-new-password"
-              />
+              <div className="relative">
+                <Input type={showConfirmPw ? "text" : "password"} value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} placeholder="••••••••" className={confirmPw && confirmPw !== newPw ? "border-destructive" : ""} data-testid="input-confirm-new-password" />
+                <button type="button" className="absolute right-3 top-2.5 text-muted-foreground" onClick={() => setShowConfirmPw(!showConfirmPw)}>
+                  {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {confirmPw && confirmPw !== newPw && <p className="text-xs text-destructive">Passwords don't match</p>}
             </div>
           </div>
@@ -419,3 +447,7 @@ export default function Settings() {
     </div>
   );
 }
+
+
+
+

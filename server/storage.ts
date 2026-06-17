@@ -1,4 +1,4 @@
-import { db } from "./db";
+﻿import { db } from "./db";
 import { users, services, bookings, reviews, transactions, notifications, conversations, messages, servicePackages, referrals, payouts, ads, customerFeedback, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage, type ServicePackage, type InsertServicePackage, type Referral, type InsertReferral, type Payout, type InsertPayout, type Ad, type InsertAd, type CustomerFeedback, type InsertCustomerFeedback } from "@shared/schema";
 import { eq, ilike, or, sql, desc, isNull, and, lte, gte } from "drizzle-orm";
 
@@ -6,6 +6,7 @@ export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   getUserByReferralCode(referralCode: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
@@ -35,8 +36,9 @@ export interface IStorage {
   
   // Booking management
   getBooking(id: number): Promise<Booking | undefined>;
-  cancelBooking(id: number, cancelledBy: string): Promise<Booking>;
+  cancelBooking(id: number, cancelledBy: string, cancelReason?: string): Promise<Booking>;
   updateBookingStatus(id: number, status: string): Promise<Booking>;
+  updateBookingPausedReason(id: number, reason: string): Promise<void>;
   
   // Premium
   updateUserPremium(userId: number, isPremium: boolean, premiumExpiresAt: Date | null, stripeSubscriptionId: string | null): Promise<User>;
@@ -49,6 +51,7 @@ export interface IStorage {
   markAllNotificationsRead(userId: number): Promise<void>;
   
   // Location
+  updateUser(userId: number, data: { name?: string; username?: string; password?: string; city?: string }): Promise<User>;
   updateUserLocation(userId: number, lat: number, lng: number): Promise<User>;
   
   // Chat
@@ -111,6 +114,10 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByReferralCode(referralCode: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.referralCode, referralCode));
+    return user;
+  }
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, email));
     return user;
   }
 
@@ -281,11 +288,12 @@ export class DatabaseStorage implements IStorage {
     return booking;
   }
 
-  async cancelBooking(id: number, cancelledBy: string): Promise<Booking> {
-    const [updated] = await db.update(bookings).set({ 
+  async cancelBooking(id: number, cancelledBy: string, cancelReason?: string): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({
       status: 'cancelled',
       cancelledBy: cancelledBy as any,
       cancelledAt: new Date(),
+      cancelReason: cancelReason || null,
     }).where(eq(bookings.id, id)).returning();
     return updated;
   }
@@ -293,6 +301,9 @@ export class DatabaseStorage implements IStorage {
   async updateBookingStatus(id: number, status: string): Promise<Booking> {
     const [updated] = await db.update(bookings).set({ status: status as any }).where(eq(bookings.id, id)).returning();
     return updated;
+  }
+  async updateBookingPausedReason(id: number, reason: string): Promise<void> {
+    await db.update(bookings).set({ pausedReason: reason }).where(eq(bookings.id, id));
   }
 
   async updateUserPremium(userId: number, isPremium: boolean, premiumExpiresAt: Date | null, stripeSubscriptionId: string | null): Promise<User> {
@@ -335,6 +346,14 @@ export class DatabaseStorage implements IStorage {
     await db.update(notifications)
       .set({ readAt: new Date() })
       .where(eq(notifications.userId, userId));
+  }
+
+  async updateUser(userId: number, data: { name?: string; username?: string; password?: string; city?: string }): Promise<User> {
+    const [updated] = await db.update(users)
+      .set(data)
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
   }
 
   async updateUserLocation(userId: number, lat: number, lng: number): Promise<User> {
@@ -485,6 +504,10 @@ export class DatabaseStorage implements IStorage {
     return pkg;
   }
 
+  async updateService(id: number, data: { title?: string; description?: string; price?: number; category?: string }): Promise<any> {
+    const [updated] = await db.update(services).set(data).where(eq(services.id, id)).returning();
+    return updated;
+  }
   async updateServicePackage(id: number, data: Partial<InsertServicePackage>): Promise<ServicePackage> {
     const [updated] = await db.update(servicePackages).set(data).where(eq(servicePackages.id, id)).returning();
     return updated;
@@ -601,3 +624,7 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+
+
+

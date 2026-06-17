@@ -1,0 +1,10 @@
+﻿const fs = require('fs');
+let c = fs.readFileSync('client/src/pages/Profile.tsx', 'utf8');
+const refCardStart = c.indexOf('<Card>\n              <CardHeader>\n                <CardTitle className="text-base flex items-center gap-2">\n                  <Gift');
+const refCardEnd = c.indexOf('</Card>', refCardStart) + 7;
+c = c.slice(0, refCardStart) + c.slice(refCardEnd + 1);
+const payCardStart = c.indexOf('<Card>\n              <CardHeader>\n                <CardTitle className="text-base flex items-center gap-2">\n                  <Wallet');
+const payCardEnd = c.indexOf('</Card>', payCardStart) + 7;
+c = c.slice(0, payCardStart) + c.slice(payCardEnd + 1);
+fs.writeFileSync('client/src/pages/Profile.tsx', c, 'utf8');
+console.log('done');

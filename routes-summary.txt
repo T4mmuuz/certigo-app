@@ -1,0 +1,76 @@
+267:     const providerId = typeof req.query.providerId === 'string' ? parseInt(req.query.providerId) : undefined;
+268:     if (!providerId) return res.status(400).json({ message: "providerId required" });
+269:     const packages = await storage.getServicePackagesByProvider(providerId);
+276:     if (user.role !== "provider") return res.status(403).json({ message: "Only providers can create packages" });
+283:       // Parse service IDs and validate provider owns all services
+294:       // Verify provider owns all services and calculate original price
+301:         if (service.providerId !== user.id) {
+308:         providerId: user.id,
+328:       if (pkg.providerId !== (req.user as any).id) {
+353:   app.patch("/api/services/:id", async (req, res) => {
+359:       if (service.providerId !== (req.user as any).id) return res.status(403).json({ message: "Not authorized" });
+361:       const updated = await storage.updateService(serviceId, { title, description, price: Number(price), category });
+403:         // Notify provider of new booking
+405:           userId: service.providerId,
+417:           body: `Your booking for ${service.title} has been submitted. The provider will contact you soon.`,
+432:     const userRole = req.user.role as 'customer' | 'provider';
+440:   app.post(api.reviews.create.path, async (req, res) => {
+452:       // Notify provider of new review
+457:           userId: service.providerId,
+501:       const providerPayout = totalAmount - platformFee;
+519:         providerId: service.providerId,
+523:         providerPayout,
+539:                 description: `${hours} hour(s) of ${service.category} service by ${service.provider.name}`,
+605:             // Send payment received notification to provider
+608:               userId: service.providerId,
+645:           providerPayout: t.providerPayout / 100,
+655:   // Get provider earnings (shows provider's net payout, not platform commission)
+656:   app.get("/api/provider/earnings", async (req, res) => {
+665:       const pendingPayouts = pendingTransactions.reduce((sum, t) => sum + t.providerPayout, 0);
+675:           providerPayout: t.providerPayout / 100,
+701:       const isProvider = service.providerId === userId;
+716:       if (cancelledBy === "provider" || isProvider) {
+722:         // Only provider cancellations/no-shows result in refunds
+732:       await storage.cancelBooking(bookingId, cancelledBy || (isProvider ? "provider" : "customer"), cancelReason);
+773:   // Mark provider no-show (customer reports)
+774:   app.post("/api/bookings/:id/provider-noshow", async (req, res) => {
+785:         return res.status(403).json({ message: "Only the customer can report provider no-show" });
+788:       // Update booking status to provider_noshow
+789:       await storage.updateBookingStatus(bookingId, "provider_noshow");
+822:   // Mark customer no-show (provider reports)
+834:       if (!service || service.providerId !== userId) {
+835:         return res.status(403).json({ message: "Only the provider can report customer no-show" });
+848:   // Mark booking as completed (provider action)
+860:       if (!service || service.providerId !== userId) {
+861:         return res.status(403).json({ message: "Only the provider can mark booking as complete" });
+919:     if ((req.user as any).role !== 'provider') {
+920:       return res.status(403).json({ message: "Only providers can subscribe to premium" });
+1075:       if (!service || service.providerId !== userId) {
+1076:         return res.status(403).json({ message: "Only the provider can mark arrival" });
+1079:       // Notify customer that provider has arrived
+1082:         type: "provider_arrived",
+1083:         title: "Your provider has arrived!",
+1084:         body: `${service.provider.name} is at your location for ${service.title}`,
+1125:       // Only customer or provider can access the chat
+1126:       if (booking.customerId !== userId && service.providerId !== userId) {
+1133:         service.providerId
+1155:       if (conversation.customerId !== userId && conversation.providerId !== userId) {
+1187:       if (conversation.customerId !== userId && conversation.providerId !== userId) {
+1198:       const recipientId = conversation.customerId === userId ? conversation.providerId : conversation.customerId;
+1403:   // ========== CUSTOMER FEEDBACK (Vendor reviews of customers) ==========
+1413:       // Get booking to verify provider
+1418:       if (!service || service.providerId !== userId) {
+1419:         return res.status(403).json({ message: "Only the service provider can leave customer feedback" });
+1441:         providerId: userId,
+1493:   // Accept booking (provider action)
+1502:       if (!service || service.providerId !== userId) return res.status(403).json({ message: "Not authorized" });
+1505:       await storage.createNotification({ userId: booking.customerId, type: "booking_accepted", title: "Booking Accepted!", body: service.title + " accepted. The provider is on their way!", metadata: JSON.stringify({ bookingId, serviceId: service.id }) });
+1510:   // Pause booking (provider action)
+1520:       if (!service || service.providerId !== userId) return res.status(403).json({ message: "Not authorized" });
+1529:   // Update provider location
+1541:   // Get provider location for active booking
+1542:   app.get("/api/bookings/:id/provider-location", async (req, res) => {
+1553:       const provider = await storage.getUser(service.providerId);
+1554:       if (!provider) return res.status(404).json({ message: "Provider not found" });
+1555:       res.json({ lat: provider.lat, lng: provider.lng });
+1556:     } catch (err) { res.status(500).json({ message: "Failed to get provider location" }); }

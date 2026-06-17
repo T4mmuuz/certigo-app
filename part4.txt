@@ -1,0 +1,1131 @@
+===PROFILE===
+import { Navbar } from "@/components/Navbar";
+import { useAuth } from "@/hooks/use-auth";
+import { useCreateService, useServices } from "@/hooks/use-services";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Plus, Settings, Camera, Gift, Copy, Check, Wallet, ExternalLink, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useState, useRef } from "react";
+import { Redirect } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+
+export default function Profile() {
+  const { user, logout } = useAuth();
+  const { data: services } = useServices();
+  const [editingService, setEditingService] = useState<any>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [isSavingService, setIsSavingService] = useState(false);
+  const { data: myReviews = [] } = useQuery({ queryKey: ["/api/reviews/my"], queryFn: async () => { const res = await fetch("/api/reviews/my"); if (!res.ok) return []; return res.json(); } });
+  const { mutateAsync: createService, isPending } = useCreateService();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editCity, setEditCity] = useState("");
+
+  const updateProfile = useMutation({
+    mutationFn: async (data: { name: string; username: string; city?: string }) => {
+      const res = await apiRequest("PATCH", "/api/users/profile", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
+      setIsEditProfileOpen(false);
+      toast({ title: "Profile updated!" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to update profile", variant: "destructive" });
+    },
+  });
+
+  const [title, setTitle] = useState("");
+  const [desc, setDesc] = useState("");
+  const [cat, setCat] = useState("plumbing");
+  const [price, setPrice] = useState("50");
+  const [pricingType, setPricingType] = useState<"fixed" | "negotiable" | "hourly" | "free_estimate">("negotiable");
+
+  const { data: referralStats } = useQuery<{
+    totalReferrals: number;
+    completedReferrals: number;
+    pendingReferrals: number;
+    totalRewardsEarned: number;
+  }>({
+    queryKey: ["/api/users/referral-stats"],
+    enabled: !!user,
+  });
+
+  const generateReferralCode = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/users/generate-referral-code"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
+    },
+  });
+
+  const { data: connectStatus, refetch: refetchConnectStatus } = useQuery<{
+    connected: boolean;
+    balance: number;
+    payoutsEnabled: boolean;
+    chargesEnabled?: boolean;
+    detailsSubmitted?: boolean;
+  }>({
+    queryKey: ["/api/connect/status"],
+    enabled: !!user,
+  });
+
+  const connectOnboard = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/connect/onboard");
+      return res.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.location.href = data.url;
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Failed to start setup", variant: "destructive" });
+    },
+  });
+
+  const requestPayout = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/payouts/request");
+      return res.json();
+    },
+    onSuccess: (data: { message: string }) => {
+      toast({ title: "Payout Requested", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/connect/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users/referral-stats"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Payout Failed", description: err.message || "Failed to request payout", variant: "destructive" });
+    },
+  });
+
+  if (!user) return <Redirect to="/login" />;
+
+  const myServices = services?.filter(s => s.providerId === user.id) || [];
+
+  const handleEditService = async () => {
+    if (!editingService) return;
+    setIsSavingService(true);
+    try {
+      const res = await fetch("/api/services/" + editingService.id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editTitle, description: editDesc, price: editPrice, category: editCategory }),
+      });
+      if (!res.ok) throw new Error("Failed to update service");
+      queryClient.invalidateQueries({ queryKey: ["/api/services"] });
+      setEditingService(null);
+      toast({ title: "Service updated!" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setIsSavingService(false);
+    }
+  };
+  const handleCreateService = async () => {
+    try {
+      await createService({
+        providerId: user.id,
+        title,
+        description: desc,
+        category: cat,
+        price: parseInt(price),
+        lat: user.lat || 40.7128,
+        lng: user.lng || -74.0060,
+        pricingType,
+      } as any);
+      setIsDialogOpen(false);
+      setTitle("");
+      setDesc("");
+      setPricingType("negotiable");
+    } catch (e) {
+    }
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file type", description: "Please select an image file", variant: "destructive" });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Please select an image under 5MB", variant: "destructive" });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const urlResponse = await fetch("/api/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          contentType: file.type,
+        }),
+      });
+
+      if (!urlResponse.ok) throw new Error("Failed to get upload URL");
+      const { uploadURL, objectPath } = await urlResponse.json();
+
+      await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+
+      const updateResponse = await apiRequest("PATCH", "/api/users/profile-picture", { objectPath });
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.refetchQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Profile picture updated!" });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({ title: "Upload failed", description: "Please try again", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const copyReferralCode = () => {
+    if (user.referralCode) {
+      navigator.clipboard.writeText(user.referralCode);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+      toast({ title: "Referral code copied!" });
+    }
+  };
+
+  return (
+    <>
+    <Dialog open={!!editingService} onOpenChange={(o) => { if (!o) setEditingService(null); }}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit Service</DialogTitle></DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2"><Label>Title</Label><Input value={editTitle} onChange={e => setEditTitle(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Description</Label><Textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Price</Label><Input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Category</Label><Input value={editCategory} onChange={e => setEditCategory(e.target.value)} /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditingService(null)}>Cancel</Button>
+          <Button onClick={handleEditService} disabled={isSavingService}>{isSavingService ? "Saving..." : "Save Changes"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      
+      <main className="container mx-auto px-4 py-8 max-w-5xl">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          
+          <div className="md:col-span-1 space-y-6">
+            <Card className="text-center py-8 border-t-4 border-t-primary">
+              <div className="flex justify-center mb-4 relative">
+                <Avatar className="w-24 h-24 border-4 border-secondary">
+                  {user.profilePicture ? (
+                    <AvatarImage src={user.profilePicture} alt={user.name} />
+                  ) : null}
+                  <AvatarFallback className="text-3xl bg-primary text-primary-foreground font-display">
+                    {user.username.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/*"
+                  className="hidden"
+                  data-testid="input-profile-picture"
+                />
+                <Button 
+                  size="icon" 
+                  variant="secondary"
+                  className="absolute bottom-0 right-1/2 translate-x-12 translate-y-1 rounded-full"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  data-testid="button-upload-picture"
+                >
+                  <Camera className="w-4 h-4" />
+                </Button>
+              </div>
+              <h2 className="text-xl font-bold" data-testid="text-user-name">{user.name}</h2>
+              <p className="text-sm text-muted-foreground mt-1">@{user.username}</p>
+              <div className="mt-2 inline-block px-3 py-1 bg-secondary rounded-full text-xs font-medium uppercase tracking-wide">
+                {user.role} Account
+              </div>
+              
+              <div className="mt-8 px-6 text-left space-y-2">
+                <div className="flex items-center justify-between text-sm py-2 border-b">
+                   <span className="text-muted-foreground">Joined</span>
+                   <span className="font-medium">Oct 2023</span>
+                </div>
+              </div>
+
+              <div className="mt-8 px-6">
+                <Button variant="outline" className="w-full" onClick={() => logout()} data-testid="button-sign-out">
+                  Sign Out
+                </Button>
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Wallet className="w-4 h-4" /> Payout Settings
+                </CardTitle>
+                <CardDescription>Withdraw your referral earnings</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {connectStatus && (
+                  <>
+                    <div className="p-3 bg-muted rounded-md text-center">
+                      <p className="text-2xl font-bold text-green-600" data-testid="text-available-balance">
+                        ${((connectStatus.balance || 0) / 100).toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Available Balance</p>
+                    </div>
+                    
+                    {!connectStatus.connected ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                          Connect your bank account to receive payouts
+                        </p>
+                        <Button 
+                          className="w-full gap-2" 
+                          onClick={() => connectOnboard.mutate()}
+                          disabled={connectOnboard.isPending}
+                          data-testid="button-connect-bank"
+                        >
+                          {connectOnboard.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ExternalLink className="w-4 h-4" />
+                          )}
+                          Connect Bank Account
+                        </Button>
+                      </div>
+                    ) : !connectStatus.payoutsEnabled ? (
+                      <div className="space-y-2">
+                        <p className="text-sm text-yellow-600">
+                          Your account setup is incomplete
+                        </p>
+                        <Button 
+                          className="w-full gap-2" 
+                          variant="outline"
+                          onClick={() => connectOnboard.mutate()}
+                          disabled={connectOnboard.isPending}
+                          data-testid="button-complete-setup"
+                        >
+                          {connectOnboard.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ExternalLink className="w-4 h-4" />
+                          )}
+                          Complete Setup
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm text-green-600 flex items-center gap-1">
+                          <Check className="w-4 h-4" /> Bank account connected
+                        </p>
+                        <Button 
+                          className="w-full" 
+                          onClick={() => requestPayout.mutate()}
+                          disabled={requestPayout.isPending || (connectStatus.balance || 0) < 500}
+                          data-testid="button-request-payout"
+                        >
+                          {requestPayout.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : null}
+                          {(connectStatus.balance || 0) < 500 
+                            ? "Minimum $5 to withdraw" 
+                            : `Withdraw $${((connectStatus.balance || 0) / 100).toFixed(2)}`}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Settings className="w-4 h-4" /> Settings
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                 <Dialog open={isEditProfileOpen} onOpenChange={(open) => {
+  if (open) { setEditName(user.name); setEditUsername(user.username); }
+  setIsEditProfileOpen(open);
+}}>
+  <DialogTrigger asChild>
+    <Button variant="ghost" className="w-full justify-start text-sm h-9">Edit Profile</Button>
+  </DialogTrigger>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Edit Profile</DialogTitle>
+      <DialogDescription>Update your display name and username.</DialogDescription>
+    </DialogHeader>
+    <div className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label>Name</Label>
+        <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Your name" />
+      </div>
+      <div className="space-y-2">
+        <Label>Username</Label>
+        <Input value={editUsername} onChange={e => setEditUsername(e.target.value)} placeholder="Your username" />
+      </div>
+          <div className="space-y-2">
+        <Label>City</Label>
+        <Input value={editCity} onChange={e => setEditCity(e.target.value)} placeholder="e.g. Houston, TX" />
+      </div>
+    </div>
+    <DialogFooter>
+      <Button
+        onClick={() => updateProfile.mutate({ name: editName, username: editUsername, city: editCity })}
+        disabled={updateProfile.isPending}
+      >
+        {updateProfile.isPending ? "Saving..." : "Save Changes"}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+                 <Button variant="ghost" className="w-full justify-start text-sm h-9">Notifications</Button>
+                 <Button variant="ghost" className="w-full justify-start text-sm h-9">Privacy</Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="md:col-span-2 space-y-8">
+            
+            {user.role === 'provider' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-display font-bold">My Services</h2>
+                  
+                  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="gap-2 shadow-lg shadow-primary/20" data-testid="button-add-service">
+                        <Plus className="w-4 h-4" /> Add Service
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Offer a New Service</DialogTitle>
+                        <DialogDescription>Create a listing for customers to find you.</DialogDescription>
+                      </DialogHeader>
+                      
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>Service Title</Label>
+                          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Expert Plumbing Repair" data-testid="input-service-title" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Category</Label>
+                            <Input 
+                              value={cat} 
+                              onChange={e => setCat(e.target.value)} 
+                              placeholder="e.g. Plumbing, Welding"
+                              data-testid="input-service-category"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Starting Price ($)</Label>
+                            <Input type="number" value={price} onChange={e => setPrice(e.target.value)} data-testid="input-service-price" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Pricing Type</Label>
+                          <Select value={pricingType} onValueChange={(v) => setPricingType(v as any)}>
+                            <SelectTrigger data-testid="select-pricing-type">
+                              <SelectValue placeholder="How do you charge?" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="fixed">Fixed Price — set rate per job</SelectItem>
+                              <SelectItem value="negotiable">Negotiable — agree with customer</SelectItem>
+                              <SelectItem value="hourly">Hourly Rate — charged by the hour</SelectItem>
+                              <SelectItem value="free_estimate">Free Estimate — quote first, then decide</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Description</Label>
+                          <Textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Describe what you offer..." data-testid="input-service-description" />
+                        </div>
+                      </div>
+
+                      <DialogFooter>
+                        <Button onClick={handleCreateService} disabled={isPending} data-testid="button-publish-service">
+                          {isPending ? "Creating..." : "Publish Service"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                {myServices.length === 0 ? (
+                  <div className="bg-muted/30 border border-dashed rounded-xl p-8 text-center">
+                    <p className="text-muted-foreground">You haven't listed any services yet.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {myServices.map(service => (
+                      <Card key={service.id} className="p-4 flex justify-between items-center group" data-testid={`card-service-${service.id}`}>
+                        <div>
+                          <h3 className="font-bold">{service.title}</h3>
+                          <div className="flex gap-2 text-sm text-muted-foreground mt-1 flex-wrap">
+                            <span className="capitalize bg-secondary px-2 py-0.5 rounded text-foreground font-medium">{service.category}</span>
+                            <span>${service.price}/hr</span>
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => { setEditingService(service); setEditTitle(service.title); setEditDesc(service.description); setEditPrice(String(service.price)); setEditCategory(service.category); }}>Edit</Button>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <h2 className="text-2xl font-display font-bold">Account Overview</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border-none">
+                  <h3 className="font-bold text-lg text-primary mb-1">Total Spent</h3>
+                  <p className="text-3xl font-display font-bold text-foreground">$0.00</p>
+                  <p className="text-xs text-muted-foreground mt-2">Lifetime spending on services</p>
+                </Card>
+                <Card className="p-6 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/30 dark:to-orange-900/30 border-none">
+                  <h3 className="font-bold text-lg text-amber-600 dark:text-amber-400 mb-1">Reviews Given</h3>
+                  <p className="text-3xl font-display font-bold text-amber-900 dark:text-amber-300">{myReviews.length}</p>
+                  <p className="text-xs text-amber-800/60 dark:text-amber-400/60 mt-2">Help the community by reviewing</p>
+                </Card>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </main>
+    </div>
+    </>
+  );
+}
+
+===BOOKINGS===
+import { useState } from "react";
+import { Navbar } from "@/components/Navbar";
+import { useBookings } from "@/hooks/use-bookings";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/hooks/use-auth";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { format } from "date-fns";
+import { Calendar, Clock, MapPin, Loader2, MessageSquare, X, AlertTriangle, RotateCcw, Star, UserCheck, CheckCircle, PauseCircle, Wallet } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+
+export default function Bookings() {
+  const { data: bookings, isLoading, refetch } = useBookings();
+  const { user } = useAuth();
+  const { t } = useLanguage();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [loadingChatBookingId, setLoadingChatBookingId] = useState<number | null>(null);
+  const [cancellingBookingId, setCancellingBookingId] = useState<number | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [rebookingId, setRebookingId] = useState<number | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState<number | null>(null);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackNoShow, setFeedbackNoShow] = useState(false);
+  const [pauseDialogOpen, setPauseDialogOpen] = useState(null);
+  const [pauseReason, setPauseReason] = useState("");
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+
+  const startChatMutation = useMutation({
+    mutationFn: async (bookingId: number) => {
+      setLoadingChatBookingId(bookingId);
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/chat`, {});
+      return response.json();
+    },
+    onSuccess: (conversation) => {
+      setLoadingChatBookingId(null);
+      if (conversation?.id) {
+        setLocation(`/chat/${conversation.id}`);
+      } else {
+        toast({
+          title: "Unable to open chat",
+          description: "Could not create conversation. Please try again.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      setLoadingChatBookingId(null);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start chat. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const cancelBookingMutation = useMutation({
+    mutationFn: async (bookingId: number) => {
+      setCancellingBookingId(bookingId);
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/cancel`, {
+        cancelledBy: user?.role === "provider" ? "provider" : "customer",
+        cancelReason
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setCancellingBookingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({
+        title: "Booking Cancelled",
+        description: data.message || "Your booking has been cancelled.",
+      });
+    },
+    onError: (error: Error) => {
+      setCancellingBookingId(null);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel booking. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rebookMutation = useMutation({
+    mutationFn: async ({ serviceId, hours }: { serviceId: number; hours: number }) => {
+      setRebookingId(serviceId);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(10, 0, 0, 0);
+      
+      const response = await apiRequest("POST", "/api/bookings", {
+        serviceId,
+        date: tomorrow.toISOString(),
+        paymentMethod: "app",
+        hours,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      setRebookingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({
+        title: "Booking Created",
+        description: "Your repeat booking has been scheduled for tomorrow at 10 AM.",
+      });
+    },
+    onError: (error: Error) => {
+      setRebookingId(null);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create booking. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const submitFeedbackMutation = useMutation({
+    mutationFn: async ({ bookingId, rating, comment, noShow }: { bookingId: number; rating: number; comment: string; noShow: boolean }) => {
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/customer-feedback`, {
+        rating,
+        comment: comment || null,
+        noShow,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      setFeedbackDialogOpen(null);
+      setFeedbackRating(5);
+      setFeedbackComment("");
+      setFeedbackNoShow(false);
+      toast({
+        title: "Feedback Submitted",
+        description: "Your feedback about the customer has been recorded.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit feedback. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const acceptBookingMutation = useMutation({
+    mutationFn: async (bookingId) => {
+      const response = await apiRequest("POST", "/api/bookings/" + bookingId + "/accept", {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({ title: "Job Accepted", description: "The customer has been notified." });
+    },
+    onError: (error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+  });
+
+  const pauseBookingMutation = useMutation({
+    mutationFn: async ({ bookingId, reason }) => {
+      const response = await apiRequest("POST", "/api/bookings/" + bookingId + "/pause", { reason });
+      return response.json();
+    },
+    onSuccess: () => {
+      setPauseDialogOpen(null);
+      setPauseReason("");
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({ title: "Job Paused", description: "The customer has been notified." });
+    },
+    onError: (error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+  });
+
+  const submitReviewMutation = useMutation({
+    mutationFn: async ({ bookingId, rating, comment }) => {
+      const response = await apiRequest("POST", "/api/reviews", { bookingId, rating, comment });
+      return response.json();
+    },
+    onSuccess: () => {
+      setReviewDialogOpen(null);
+      setReviewRating(5);
+      setReviewComment("");
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({ title: "Review Submitted", description: "Thank you for your feedback!" });
+    },
+    onError: (error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+  });
+
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'accepted': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40';
+      case 'completed': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40';
+      case 'cancelled': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40';
+      case 'provider_noshow':
+      case 'customer_noshow': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40';
+      default: return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40';
+    }
+  };
+
+  const getStatusBgClass = (status: string) => {
+    switch(status) {
+      case 'accepted': return 'bg-green-500';
+      case 'completed': return 'bg-blue-500';
+      case 'cancelled': return 'bg-red-500';
+      case 'provider_noshow':
+      case 'customer_noshow': return 'bg-orange-500';
+      default: return 'bg-amber-500';
+    }
+  };
+
+  const canCancel = (status: string) => {
+    return status === 'pending' || status === 'accepted';
+  };
+
+  const isProvider = user?.role === "provider";
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      
+      <main className="container mx-auto px-4 py-8 max-w-4xl">
+        <h1 className="text-3xl font-bold mb-8">{t("nav.bookings")}</h1>
+
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : !bookings || bookings.length === 0 ? (
+          <div className="text-center py-12 bg-secondary/30 rounded-2xl border border-dashed border-border">
+            <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium">{t("home.noServices")}</h3>
+            <p className="text-muted-foreground">{t("home.expertsNearby")}</p>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {bookings.map((booking) => {
+              const isChatLoading = loadingChatBookingId === booking.id;
+              const isCancelling = cancellingBookingId === booking.id;
+              const isRebooking = rebookingId === booking.serviceId;
+              const showCancelButton = canCancel(booking.status);
+              const showRebookButton = booking.status === 'completed' && user?.role === 'customer';
+              const showAcceptButton = isProvider && booking.status === 'pending';
+              const showPauseButton = isProvider && booking.status === 'accepted';
+              const showCompleteButton = isProvider && booking.status === 'accepted';
+              const canReview = !isProvider && (booking.status === 'completed' || booking.status === 'cancelled');
+              
+              return (
+                <Card key={booking.id} className="overflow-hidden hover:shadow-md transition-shadow" data-testid={`booking-card-${booking.id}`}>
+                  <CardContent className="p-0 flex flex-col sm:flex-row">
+                    <div className={`w-full h-1 sm:w-2 sm:h-auto ${getStatusBgClass(booking.status)}`} />
+                    
+                    <div className="p-6 flex-1">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                         <div>
+                           <h3 className="text-lg font-bold">{booking.service.title}</h3>
+                           <p className="text-sm text-muted-foreground">Booking #{booking.id}</p>
+                         </div>
+                         {isProvider && (booking.jobDescription || booking.urgencyLevel || booking.estimatedBudget) && (
+                        <div className="bg-muted/40 rounded-lg p-3 mb-4 space-y-1 text-sm">
+                          <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wide mb-2">Job Details</p>
+                          {booking.jobDescription && <p><span className="font-medium">Description:</span> {booking.jobDescription}</p>}
+                          {booking.urgencyLevel && <p><span className="font-medium">Urgency:</span> <span className="capitalize">{booking.urgencyLevel}</span></p>}
+                          {booking.estimatedBudget && <p><span className="font-medium">Budget:</span> </p>}
+                          {booking.jobSize && <p><span className="font-medium">Job Size:</span> <span className="capitalize">{booking.jobSize}</span></p>}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                           <Badge className={`${getStatusColor(booking.status)} border-none capitalize`}>
+                             {booking.status.replace('_', ' ')}
+                           </Badge>
+                           {booking.paymentMethod === 'cash' && (
+                             <Badge variant="outline" className="text-xs">
+                               Cash Payment
+                             </Badge>
+                           )}
+                         </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Calendar className="w-4 h-4 text-primary" />
+                          <span className="font-medium text-foreground">{format(new Date(booking.date), 'MMMM d, yyyy')}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Clock className="w-4 h-4 text-primary" />
+                          <span className="font-medium text-foreground">{format(new Date(booking.date), 'h:mm a')}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <MapPin className="w-4 h-4 text-primary" />
+                          <span>Service Location</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startChatMutation.mutate(booking.id)}
+                          disabled={isChatLoading || startChatMutation.isPending}
+                          data-testid={`button-chat-${booking.id}`}
+                        >
+                          {isChatLoading ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <MessageSquare className="w-4 h-4 mr-2" />
+                          )}
+                          {isChatLoading ? t("common.loading") : t("nav.messages")}
+                        </Button>
+
+                        {showRebookButton && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => rebookMutation.mutate({ serviceId: booking.serviceId, hours: booking.hours })}
+                            disabled={isRebooking || rebookMutation.isPending}
+                            data-testid={`button-rebook-${booking.id}`}
+                          >
+                            {isRebooking ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-4 h-4 mr-2" />
+                            )}
+                            {isRebooking ? t("common.loading") : "Book Again"}
+                          </Button>
+                        )}
+
+                        {showAcceptButton && (
+                          <Button size="sm" onClick={() => acceptBookingMutation.mutate(booking.id)} disabled={acceptBookingMutation.isPending}>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Accept Job
+                          </Button>
+                        )}
+
+                        {showPauseButton && (
+                          <Dialog open={pauseDialogOpen === booking.id} onOpenChange={(open) => { if (open) setPauseDialogOpen(booking.id); else setPauseDialogOpen(null); }}>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm"><PauseCircle className="w-4 h-4 mr-2" />Pause Job</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader><DialogTitle>Pause Job</DialogTitle><DialogDescription>Why are you pausing this job?</DialogDescription></DialogHeader>
+                              <Textarea placeholder="Reason for pausing..." value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} />
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setPauseDialogOpen(null)}>Cancel</Button>
+                                <Button onClick={() => pauseBookingMutation.mutate({ bookingId: booking.id, reason: pauseReason })} disabled={pauseBookingMutation.isPending}>Confirm Pause</Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+
+                        {showCompleteButton && (
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => { if(confirm("Mark this job as finished?")) { apiRequest("POST", "/api/bookings/" + booking.id + "/complete", {}).then(() => { queryClient.invalidateQueries({ queryKey: ["/api/bookings"] }); refetch(); toast({ title: "Job Completed!" }); }); } }}>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Job Finished
+                          </Button>
+                        )}
+
+                        {canReview && (
+                          <Dialog open={reviewDialogOpen === booking.id} onOpenChange={(open) => { if (open) setReviewDialogOpen(booking.id); else setReviewDialogOpen(null); }}>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm"><Star className="w-4 h-4 mr-2" />Leave Review</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader><DialogTitle>Leave a Review</DialogTitle><DialogDescription>How was your experience?</DialogDescription></DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <div className="flex gap-1">
+                                  {[1,2,3,4,5].map((star) => (
+                                    <button key={star} type="button" onClick={() => setReviewRating(star)}>
+                                      <Star className={"w-6 h-6 " + (star <= reviewRating ? "text-amber-500 fill-amber-500" : "text-muted-foreground")} />
+                                    </button>
+                                  ))}
+                                </div>
+                                <Textarea placeholder="Share your experience..." value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} />
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setReviewDialogOpen(null)}>Cancel</Button>
+                                <Button onClick={() => submitReviewMutation.mutate({ bookingId: booking.id, rating: reviewRating, comment: reviewComment })} disabled={submitReviewMutation.isPending}>Submit Review</Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+
+                        {/* Rate Customer button for providers on completed bookings */}
+                        {isProvider && (booking.status === 'completed' || booking.status === 'customer_noshow') && (
+                          <Dialog open={feedbackDialogOpen === booking.id} onOpenChange={(open) => {
+                            if (open) {
+                              setFeedbackDialogOpen(booking.id);
+                              setFeedbackNoShow(booking.status === 'customer_noshow');
+                            } else {
+                              setFeedbackDialogOpen(null);
+                            }
+                          }}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                data-testid={`button-rate-customer-${booking.id}`}
+                              >
+                                <UserCheck className="w-4 h-4 mr-2" />
+                                Rate Customer
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Rate Customer</DialogTitle>
+                                <DialogDescription>
+                                  Share your experience working with this customer.
+                                </DialogDescription>
+                              </DialogHeader>
+                              
+                              <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                  <Label>Rating</Label>
+                                  <div className="flex gap-1">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <button
+                                        key={star}
+                                        type="button"
+                                        onClick={() => setFeedbackRating(star)}
+                                        className="p-1"
+                                      >
+                                        <Star 
+                                          className={`w-6 h-6 ${star <= feedbackRating ? 'text-amber-500 fill-amber-500' : 'text-muted-foreground'}`}
+                                        />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <Label htmlFor="comment">Comment (optional)</Label>
+                                  <Textarea
+                                    id="comment"
+                                    placeholder="How was your experience with this customer?"
+                                    value={feedbackComment}
+                                    onChange={(e) => setFeedbackComment(e.target.value)}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox 
+                                    id="noshow" 
+                                    checked={feedbackNoShow}
+                                    onCheckedChange={(checked) => setFeedbackNoShow(checked as boolean)}
+                                  />
+                                  <Label htmlFor="noshow" className="text-sm font-normal">
+                                    Customer was not at the location (no-show)
+                                  </Label>
+                                </div>
+                              </div>
+                              
+                              <DialogFooter>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setFeedbackDialogOpen(null)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  onClick={() => submitFeedbackMutation.mutate({
+                                    bookingId: booking.id,
+                                    rating: feedbackRating,
+                                    comment: feedbackComment,
+                                    noShow: feedbackNoShow,
+                                  })}
+                                  disabled={submitFeedbackMutation.isPending}
+                                >
+                                  {submitFeedbackMutation.isPending ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  ) : null}
+                                  Submit Feedback
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+
+                        {showCancelButton && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-destructive border-destructive/50"
+                                disabled={isCancelling}
+                                data-testid={`button-cancel-${booking.id}`}
+                              >
+                                {isCancelling ? (
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <X className="w-4 h-4 mr-2" />
+                                )}
+                                Cancel
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="flex items-center gap-2">
+                                  <AlertTriangle className="w-5 h-5 text-destructive" />
+                                  Cancel Booking
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="space-y-3">
+                                  <p>Are you sure you want to cancel this booking for <strong>{booking.service.title}</strong>?</p>
+                                  
+                                  <div className="bg-muted/50 p-3 rounded-md text-sm space-y-2">
+                                    <p className="font-medium text-foreground">Refund Policy:</p>
+                                    {isProvider ? (
+                                      <p className="text-green-600 dark:text-green-400">
+                                        As a provider, if you cancel, the customer will receive a full refund.
+                                      </p>
+                                    ) : (
+                                      <p className="text-amber-600 dark:text-amber-400">
+                                        Customer cancellations are not eligible for refunds. Only provider cancellations or no-shows result in refunds.
+                                      </p>
+                                    )}
+                                  </div>
+                                                                  {isProvider && (
+                                    <Textarea
+                                      className="mt-2"
+                                      placeholder="Reason for cancelling..."
+                                      value={cancelReason}
+                                      onChange={(e) => setCancelReason(e.target.value)}
+                                    />
+                                  )}
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => cancelBookingMutation.mutate(booking.id)}
+                                >
+                                  Yes, Cancel Booking
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-secondary/20 p-6 flex flex-col justify-center items-end min-w-[150px] border-t sm:border-t-0 sm:border-l">
+                      <span className="text-xs text-muted-foreground uppercase font-bold">Total</span>
+                      <span className="text-2xl font-bold text-primary">${booking.service.price}</span>
+                      {booking.depositPaid && (
+                        <span className="text-xs text-green-600 dark:text-green-400 font-medium mt-1 flex items-center">
+                          Deposit Paid
+                        </span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}

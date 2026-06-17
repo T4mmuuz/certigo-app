@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
+﻿import { pgTable, text, serial, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -13,6 +13,7 @@ export const users = pgTable("users", {
   profilePicture: text("profile_picture"),
   lat: real("lat"),
   lng: real("lng"),
+  city: text("city"),
   isPremium: boolean("is_premium").default(false).notNull(),
   premiumExpiresAt: timestamp("premium_expires_at"),
   stripeSubscriptionId: text("stripe_subscription_id"),
@@ -31,18 +32,20 @@ export const services = pgTable("services", {
   price: integer("price").notNull(), // Base price or starting rate
   lat: real("lat").notNull(),
   lng: real("lng").notNull(),
+  city: text("city"),
   pricingType: text("pricing_type", { enum: ["fixed", "negotiable", "hourly", "free_estimate"] }).default("negotiable"),
-  responseTime: text("response_time"), // e.g., "Within 1 hour", "Same day"
+  responseTime: text("response_time"),
+  photos: text("photos").array().default([]), // e.g., "Within 1 hour", "Same day"
 });
 
 export const bookings = pgTable("bookings", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").notNull(),
   serviceId: integer("service_id").notNull(),
-  status: text("status", { enum: ["pending", "accepted", "completed", "cancelled", "provider_noshow", "customer_noshow"] }).default("pending").notNull(),
+  status: text("status", { enum: ["pending", "accepted", "paused", "completed", "cancelled", "provider_noshow", "customer_noshow"] }).default("pending").notNull(),
   date: timestamp("date").notNull(),
   depositPaid: boolean("deposit_paid").default(false).notNull(),
-  paymentMethod: text("payment_method", { enum: ["app", "cash"] }).default("app").notNull(),
+  paymentMethod: text("payment_method", { enum: ["app", "cash", "paypal"] }).default("app").notNull(),
   cancelledBy: text("cancelled_by", { enum: ["customer", "provider"] }),
   cancelledAt: timestamp("cancelled_at"),
   hours: integer("hours"), // Optional, kept for backward compat
@@ -52,6 +55,8 @@ export const bookings = pgTable("bookings", {
   estimatedDuration: text("estimated_duration"), // e.g. "1-3 hours", "half day"
   urgencyLevel: text("urgency_level", { enum: ["flexible", "today", "asap", "emergency"] }).default("flexible"),
   jobDescription: text("job_description"), // Customer's description of the problem
+  pausedReason: text("paused_reason"),
+  cancelReason: text("cancel_reason"),
 });
 
 export const reviews = pgTable("reviews", {
@@ -143,7 +148,7 @@ export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   type: text("type", { 
-    enum: ["booking_new", "booking_confirmed", "booking_cancelled", "booking_completed", "provider_arriving", "provider_arrived", "payment_received", "review_received", "new_message", "referral_reward", "payout_completed"] 
+    enum: ["booking_new", "booking_confirmed", "booking_cancelled", "booking_completed", "booking_accepted", "booking_paused", "provider_arriving", "provider_arrived", "payment_received", "review_received", "new_message", "referral_reward", "payout_completed"] 
   }).notNull(),
   title: text("title").notNull(),
   body: text("body").notNull(),
@@ -350,3 +355,4 @@ export type Ad = typeof ads.$inferSelect;
 export type InsertAd = z.infer<typeof insertAdSchema>;
 export type CustomerFeedback = typeof customerFeedback.$inferSelect;
 export type InsertCustomerFeedback = z.infer<typeof insertCustomerFeedbackSchema>;
+

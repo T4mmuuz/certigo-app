@@ -1,3 +1,5 @@
+﻿import { v2 as cloudinary } from "cloudinary";
+cloudinary.config({ cloud_name: process.env.CLOUDINARY_CLOUD_NAME, api_key: process.env.CLOUDINARY_API_KEY, api_secret: process.env.CLOUDINARY_API_SECRET });
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -6,11 +8,14 @@ import { z } from "zod";
 import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { insertUserSchema, users } from "@shared/schema";
 import pgSession from "connect-pg-simple";
-import { pool } from "./db";
+import { pool, db } from "./db";
+import { eq } from "drizzle-orm";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
+import cors from "cors";
 
 const PLATFORM_COMMISSION_RATE = 0.15; // 15% commission
 const PREMIUM_PRICE_CENTS = 2700; // $27/month premium subscription
@@ -20,14 +25,35 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   // Auth Setup
+  const isProduction = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
+
+  // Railway está detrás de un proxy HTTPS; esto permite que Express
+  // detecte correctamente conexiones seguras para las cookies
+  app.set("trust proxy", 1);
+
+  // Permite que la app empaquetada (APK) haga peticiones con cookies
+  // hacia este servidor desde un origen distinto
+  app.use(cors({
+    origin: [
+      "https://localhost",
+      "capacitor://localhost",
+      "http://localhost",
+    ],
+    credentials: true,
+  }));
+
   const PGStore = pgSession(session);
-  
+
   app.use(session({
     store: new PGStore({ pool, createTableIfMissing: true }),
     secret: process.env.SESSION_SECRET || "secret",
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 } // 30 days
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+    }
   }));
 
   app.use(passport.initialize());
@@ -35,10 +61,14 @@ export async function registerRoutes(
 
   passport.use(new LocalStrategy(async (username, password, done) => {
     try {
-      const user = await storage.getUserByUsername(username);
+      let user = await storage.getUserByUsername(username);
+      if (!user) user = await storage.getUserByEmail(username);
       if (!user) return done(null, false, { message: "Incorrect username." });
       // In a real app, compare hashed passwords. For MVP, simple comparison (NOT SECURE for production)
-      if (user.password !== password) return done(null, false, { message: "Incorrect password." });
+      if (user.password === 'google-oauth') return done(null, false, { message: "This account uses Google login." });
+      const bcrypt = await import("bcryptjs");
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) return done(null, false, { message: "Incorrect password." });
       return done(null, user);
     } catch (err) {
       return done(err);
@@ -72,6 +102,8 @@ export async function registerRoutes(
         }
       }
       
+      const bcrypt = await import("bcryptjs");
+      input.password = await bcrypt.hash(input.password, 10);
       const user = await storage.createUser({
         ...input,
         referredBy: referrerId,
@@ -101,6 +133,42 @@ export async function registerRoutes(
     }
   });
 
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.NODE_ENV === 'production'
+      ? 'https://certigo-app-production.up.railway.app/auth/google/callback'
+      : 'http://localhost:5000/auth/google/callback',
+  }, async (accessToken, refreshToken, profile, done) => {
+    try {
+      const email = profile.emails?.[0]?.value;
+      if (!email) return done(new Error('No email from Google'));
+      let [user] = await db.select().from(users).where(eq(users.username, email));
+      if (!user) {
+        const [newUser] = await db.insert(users).values({
+          username: email,
+          password: 'google-oauth',
+          name: profile.displayName || email,
+          role: 'customer',
+          bio: '',
+          lat: 29.7604,
+          lng: -95.3698,
+        }).returning();
+        user = newUser;
+      }
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
+  }));
+
+  app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+  app.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/login' }),
+    (req, res) => { res.redirect("/"); }
+  );
+
   app.post(api.auth.login.path, passport.authenticate("local"), (req, res) => {
     res.status(200).json(req.user);
   });
@@ -124,6 +192,41 @@ export async function registerRoutes(
   const objectStorageService = new ObjectStorageService();
 
   // Profile picture update
+  app.post("/api/users/change-password", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) return res.status(400).json({ message: "Missing fields" });
+      if (newPassword.length < 6) return res.status(400).json({ message: "Password too short" });
+      const user = await storage.getUser((req.user as any).id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const bcrypt = await import("bcryptjs");
+      const valid = await bcrypt.compare(currentPassword, user.password);
+      if (!valid) return res.status(401).json({ message: "Current password is incorrect" });
+      const hashed = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser((req.user as any).id, { password: hashed });
+      res.json({ message: "Password updated successfully" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to change password" });
+    }
+  });
+
+  app.patch("/api/users/profile", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const { name, username, city } = req.body;
+      if (!name || !username) return res.status(400).json({ message: "Name and username are required" });
+      const existing = await storage.getUserByUsername(username);
+      if (existing && existing.id !== (req.user as any).id) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+      const updated = await storage.updateUser((req.user as any).id, { name, username, city });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to update profile" });
+    }
+  });
+
   app.patch("/api/users/profile-picture", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     try {
@@ -271,6 +374,22 @@ export async function registerRoutes(
     res.json(service);
   });
 
+  
+  app.patch("/api/services/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const serviceId = Number(req.params.id);
+      const service = await storage.getService(serviceId);
+      if (!service) return res.status(404).json({ message: "Service not found" });
+      if (service.providerId !== (req.user as any).id) return res.status(403).json({ message: "Not authorized" });
+      const { title, description, price, category } = req.body;
+      const updated = await storage.updateService(serviceId, { title, description, price: Number(price), category });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post(api.services.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     try {
@@ -343,10 +462,83 @@ export async function registerRoutes(
   });
 
   // Reviews
+
+
+  // Upload profile picture via Cloudinary
+  app.post('/api/users/profile-picture-upload', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+      const { base64 } = req.body;
+      if (!base64) return res.status(400).json({ message: 'No image provided' });
+      const result = await cloudinary.uploader.upload(base64, {
+        folder: 'certigo/profiles',
+        public_id: 'profile_' + (req.user as any).id + '_' + Date.now(),
+        transformation: [{ width: 300, height: 300, crop: 'fill', quality: 'auto' }],
+      });
+      const updatedUser = await storage.updateUserProfilePicture((req.user as any).id, result.secure_url);
+      res.json(updatedUser);
+    } catch (err) { res.status(500).json({ message: err.message || 'Upload failed' }); }
+  });
+
+  // Upload service photos (max 5)
+  app.post('/api/services/:id/photos', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+      const serviceId = Number(req.params.id);
+      const service = await storage.getService(serviceId);
+      if (!service) return res.status(404).json({ message: 'Service not found' });
+      if (service.providerId !== (req.user as any).id) return res.status(403).json({ message: 'Not authorized' });
+      const { base64 } = req.body;
+      if (!base64) return res.status(400).json({ message: 'No image provided' });
+      const currentPhotos = (service as any).photos || [];
+      if (currentPhotos.length >= 5) return res.status(400).json({ message: 'Maximum 5 photos allowed' });
+      const result = await cloudinary.uploader.upload(base64, { folder: 'certigo/services', transformation: [{ width: 800, height: 600, crop: 'fill', quality: 'auto' }] });
+      const newPhotos = [...currentPhotos, result.secure_url];
+      await pool.query('UPDATE services SET photos = $1 WHERE id = $2', [newPhotos, serviceId]);
+      res.json({ url: result.secure_url, photos: newPhotos });
+    } catch (err) { res.status(500).json({ message: err.message || 'Upload failed' }); }
+  });
+
+  // Delete service photo
+  app.delete('/api/services/:id/photos', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: 'Unauthorized' });
+    try {
+      const serviceId = Number(req.params.id);
+      const service = await storage.getService(serviceId);
+      if (!service) return res.status(404).json({ message: 'Service not found' });
+      if (service.providerId !== (req.user as any).id) return res.status(403).json({ message: 'Not authorized' });
+      const { url } = req.body;
+      const currentPhotos = (service as any).photos || [];
+      const newPhotos = currentPhotos.filter((p) => p !== url);
+      await pool.query('UPDATE services SET photos = $1 WHERE id = $2', [newPhotos, serviceId]);
+      res.json({ photos: newPhotos });
+    } catch (err) { res.status(500).json({ message: err.message || 'Delete failed' }); }
+  });
+
+  // GET /api/reviews/my
+  app.get("/api/reviews/my", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const userId = (req.user as any).id;
+      const result = await pool.query(
+        "SELECT * FROM reviews WHERE customer_id = $1 ORDER BY created_at DESC",
+        [userId]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch reviews" });
+    }
+  });
   app.post(api.reviews.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     try {
-      const input = api.reviews.create.input.parse(req.body);
+      const { bookingId, rating, comment } = req.body;
+      if (!bookingId || !rating || !comment) return res.status(400).json({ message: "bookingId, rating and comment are required" });
+      const booking = await storage.getBooking(Number(bookingId));
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      if (booking.customerId !== (req.user as any).id) return res.status(403).json({ message: "Not authorized" });
+      if (booking.status !== "completed" && booking.status !== "cancelled") return res.status(400).json({ message: "Can only review completed or cancelled bookings" });
+      const input = { bookingId: Number(bookingId), serviceId: booking.serviceId, customerId: booking.customerId, rating: Number(rating), comment };
       const review = await storage.createReview(input);
       
       // Notify provider of new review
@@ -587,7 +779,7 @@ export async function registerRoutes(
     
     try {
       const bookingId = Number(req.params.id);
-      const { cancelledBy } = req.body;
+      const { cancelledBy, cancelReason } = req.body;
       const userId = (req.user as any).id;
       
       const booking = await storage.getBooking(bookingId);
@@ -614,11 +806,11 @@ export async function registerRoutes(
       let refundReason = "";
       
       if (cancelledBy === "provider" || isProvider) {
-        // Provider cancels or no-shows → Full refund to customer
+        // Provider cancels or no-shows â†’ Full refund to customer
         refundEligible = true;
         refundReason = "Provider cancelled - full refund";
       } else if (isCustomer) {
-        // Customer cancels → No refund regardless of timing
+        // Customer cancels â†’ No refund regardless of timing
         // Only provider cancellations/no-shows result in refunds
         refundEligible = false;
         if (hoursUntilBooking < 24) {
@@ -629,7 +821,7 @@ export async function registerRoutes(
       }
       
       // Update booking status
-      await storage.cancelBooking(bookingId, cancelledBy || (isProvider ? "provider" : "customer"));
+      await storage.cancelBooking(bookingId, cancelledBy || (isProvider ? "provider" : "customer"), cancelReason);
       
       // Process refund if eligible and payment was made via app
       if (refundEligible && transaction && transaction.status === "completed" && booking.paymentMethod === "app") {
@@ -1375,6 +1567,95 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to get customer rating" });
     }
   });
+app.delete("/api/users/account", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const userId = (req.user as any).id;
+      await pool.query("DELETE FROM session WHERE sess::json->'passport'->>'user' = $1", [String(userId)]);
+      await pool.query("DELETE FROM users WHERE id = $1", [userId]);
+      req.logout(() => {
+        res.json({ message: "Account deleted" });
+      });
+    } catch (err: any) {
+      console.error("Delete account error:", err);
+      res.status(500).json({ message: err.message || "Failed to delete account" });
+    }
+  });
 
+  // Accept booking (provider action)
+  app.post("/api/bookings/:id/accept", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) return res.status(403).json({ message: "Not authorized" });
+      if (booking.status !== "pending") return res.status(400).json({ message: "Only pending bookings can be accepted" });
+      await storage.updateBookingStatus(bookingId, "accepted");
+      await storage.createNotification({ userId: booking.customerId, type: "booking_accepted", title: "Booking Accepted!", body: service.title + " accepted. The provider is on their way!", metadata: JSON.stringify({ bookingId, serviceId: service.id }) });
+      res.json({ success: true, message: "Booking accepted" });
+    } catch (err) { console.error("Accept booking error:", err); res.status(500).json({ message: "Failed to accept booking" }); }
+  });
+
+  // Pause booking (provider action)
+  app.post("/api/bookings/:id/pause", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      const { reason } = req.body;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) return res.status(403).json({ message: "Not authorized" });
+      if (booking.status !== "accepted") return res.status(400).json({ message: "Only accepted bookings can be paused" });
+      await storage.updateBookingStatus(bookingId, "paused");
+      if (reason) await storage.updateBookingPausedReason(bookingId, reason);
+      await storage.createNotification({ userId: booking.customerId, type: "booking_paused", title: "Job Paused", body: "Your job has been paused" + (reason ? ": " + reason : ""), metadata: JSON.stringify({ bookingId, serviceId: service.id }) });
+      res.json({ success: true, message: "Booking paused" });
+    } catch (err) { console.error("Pause booking error:", err); res.status(500).json({ message: "Failed to pause booking" }); }
+  });
+
+  // Update provider location
+  app.put("/api/users/location", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const userId = (req.user as any).id;
+      const { lat, lng } = req.body;
+      if (!lat || !lng) return res.status(400).json({ message: "lat and lng required" });
+      await storage.updateUser(userId, { lat, lng });
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ message: "Failed to update location" }); }
+  });
+
+  // Get provider location for active booking
+  app.get("/api/bookings/:id/provider-location", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      if (booking.customerId !== userId) return res.status(403).json({ message: "Not authorized" });
+      if (booking.status !== "accepted") return res.status(400).json({ message: "Booking is not active" });
+      const service = await storage.getService(booking.serviceId);
+      if (!service) return res.status(404).json({ message: "Service not found" });
+      const provider = await storage.getUser(service.providerId);
+      if (!provider) return res.status(404).json({ message: "Provider not found" });
+      res.json({ lat: provider.lat, lng: provider.lng });
+    } catch (err) { res.status(500).json({ message: "Failed to get provider location" }); }
+  });
   return httpServer;
 }
+
+
+
+
+
+
+
+
+
+

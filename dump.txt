@@ -1,0 +1,3360 @@
+===HOME===
+import { Navbar } from "@/components/Navbar";
+import { ServiceMap } from "@/components/ServiceMap";
+import { useServices } from "@/hooks/use-services";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Search, MapPin, Star, Megaphone } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/hooks/use-auth";
+
+type Ad = {
+  id: number;
+  placement: string;
+  title: string;
+  body: string;
+  ctaText: string | null;
+  ctaUrl: string | null;
+  imagePath: string | null;
+};
+
+// Default center: Houston, Texas
+const HOUSTON: [number, number] = [29.7604, -95.3698];
+
+export default function Home() {
+  const { t } = useLanguage();
+  const { user } = useAuth();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string | undefined>();
+  const [userLocation, setUserLocation] = useState<[number, number]>(HOUSTON);
+  const [locationLoading, setLocationLoading] = useState(true);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation([position.coords.latitude, position.coords.longitude]);
+          setLocationLoading(false);
+        },
+        () => setLocationLoading(false),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      setLocationLoading(false);
+    }
+  }, []);
+
+  const { data: rawServices = [], isLoading } = useServices({
+    search: searchTerm,
+    category: activeCategory,
+  });
+  const services = useMemo(() => {
+    if (!user?.city) return rawServices;
+    return rawServices.filter(s => !s.provider?.city || s.provider.city.toLowerCase().includes(user.city.toLowerCase()));
+  }, [rawServices, user?.city]);
+
+  const { data: homeAds = [] } = useQuery<Ad[]>({
+    queryKey: ["/api/ads", "home_feed"],
+    queryFn: async () => {
+      const res = await fetch("/api/ads?placement=home_feed");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const categories = useMemo(() => {
+    const uniqueCats = new Set(services.map((s) => s.category));
+    return Array.from(uniqueCats).sort();
+  }, [services]);
+
+  return (
+    <div className="h-screen flex flex-col bg-background overflow-hidden overflow-x-hidden">
+      <Navbar />
+
+      <main className="flex-1 flex flex-col md:flex-row h-[calc(100vh-64px)] overflow-hidden relative">
+        {/* Sidebar */}
+        <aside className="w-full md:w-[400px] lg:w-[450px] flex flex-col bg-card border-r z-10 shadow-xl md:shadow-none order-2 md:order-1 md:h-full" style={{ height: undefined }}>
+          <div className="p-4 border-b space-y-3 bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+            <div>
+              <h1 className="text-xl font-bold text-foreground">{t("home.findPros")}</h1>
+              <p className="text-sm text-muted-foreground">{t("home.expertsNearby")}</p>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder={t("home.searchPlaceholder")}
+                className="pl-9 bg-muted/30 border-border/50 focus:bg-card transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                data-testid="input-home-search"
+              />
+            </div>
+
+            {/* Horizontal scroll categories */}
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none flex-nowrap">
+              <Button
+                variant={!activeCategory ? "default" : "outline"}
+                size="sm"
+                className="rounded-full flex-shrink-0 whitespace-nowrap"
+                onClick={() => setActiveCategory(undefined)}
+                data-testid="button-category-all"
+              >
+                All
+              </Button>
+              {categories.map((cat) => (
+                <Button
+                  key={cat}
+                  variant={activeCategory === cat ? "default" : "outline"}
+                  size="sm"
+                  className="rounded-full flex-shrink-0 whitespace-nowrap"
+                  onClick={() => setActiveCategory(activeCategory === cat ? undefined : cat)}
+                  data-testid={`button-category-${cat}`}
+                >
+                  <span className="capitalize">{cat}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-background/50">
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center h-40 text-muted-foreground space-y-3">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm">{t("home.findingExperts")}</p>
+              </div>
+            ) : services.length === 0 ? (
+              <div className="text-center py-10 px-4">
+                <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-3">
+                  <MapPin className="w-6 h-6 text-muted-foreground/50" />
+                </div>
+                <h3 className="font-semibold text-foreground">{t("home.noServices")}</h3>
+                <p className="text-sm text-muted-foreground mt-1">{t("home.tryAdjusting")}</p>
+              </div>
+            ) : (
+              <>
+                {homeAds.length > 0 && (
+                  <Card className="overflow-hidden border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-primary/10 rounded-md">
+                          <Megaphone className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-[10px] text-muted-foreground uppercase font-medium mb-1">Sponsored</p>
+                          <h3 className="font-bold text-foreground">{homeAds[0].title}</h3>
+                          <p className="text-sm text-muted-foreground mt-1">{homeAds[0].body}</p>
+                          {homeAds[0].ctaUrl && homeAds[0].ctaText && (
+                            <a href={homeAds[0].ctaUrl} target="_blank" rel="noopener noreferrer" className="inline-block mt-2">
+                              <Button size="sm" variant="outline" className="text-xs">{homeAds[0].ctaText}</Button>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {services.map((service) => (
+                  <Link key={service.id} href={`/services/${service.id}`} className="block group">
+                    <Card className="overflow-hidden border-border/50 hover:border-primary/30 hover:shadow-md transition-all duration-300 group-hover:-translate-y-0.5 bg-card">
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1 min-w-0 pr-3">
+                            <p className="font-bold text-foreground group-hover:text-primary transition-colors truncate">{service.provider.name}</p>
+                            <p className="text-xs text-muted-foreground capitalize font-medium">{service.category}</p>
+                            <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{service.description}</p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <span className="block font-bold text-primary text-lg">${service.price}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase font-medium">
+                              {(service as any).pricingType === "hourly" ? "per hour" :
+                               (service as any).pricingType === "fixed" ? "fixed" :
+                               (service as any).pricingType === "free_estimate" ? "free est." :
+                               "starting"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center text-[10px] font-bold text-primary">
+                              {service.provider.name.charAt(0)}
+                            </div>
+<span className="font-medium">{service.title}</span>
+                            {service.provider.city && <span className="text-muted-foreground">· {service.provider.city}</span>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center text-amber-500 font-bold bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
+                              <Star className="w-3 h-3 fill-current mr-1" />
+                              4.8
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </>
+            )}
+          </div>
+        </aside>
+
+        {/* Map Area — reduced on mobile */}
+        <div className="flex-1 relative order-1 md:order-2 h-[200px] md:h-full">
+          <ServiceMap services={services} userLocation={userLocation} />
+          <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent md:hidden pointer-events-none z-[400]" />
+        </div>
+      </main>
+    </div>
+  );
+}
+
+===BOOKINGS===
+import { useState } from "react";
+import { Navbar } from "@/components/Navbar";
+import { useBookings } from "@/hooks/use-bookings";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/hooks/use-auth";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { format } from "date-fns";
+import { Calendar, Clock, MapPin, Loader2, MessageSquare, X, AlertTriangle, RotateCcw, Star, UserCheck, CheckCircle, PauseCircle, Wallet } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
+
+export default function Bookings() {
+  const { data: bookings, isLoading, refetch } = useBookings();
+  const { user } = useAuth();
+  const { t } = useLanguage();
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [loadingChatBookingId, setLoadingChatBookingId] = useState<number | null>(null);
+  const [cancellingBookingId, setCancellingBookingId] = useState<number | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [rebookingId, setRebookingId] = useState<number | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState<number | null>(null);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackNoShow, setFeedbackNoShow] = useState(false);
+  const [pauseDialogOpen, setPauseDialogOpen] = useState(null);
+  const [pauseReason, setPauseReason] = useState("");
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+
+  const startChatMutation = useMutation({
+    mutationFn: async (bookingId: number) => {
+      setLoadingChatBookingId(bookingId);
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/chat`, {});
+      return response.json();
+    },
+    onSuccess: (conversation) => {
+      setLoadingChatBookingId(null);
+      if (conversation?.id) {
+        setLocation(`/chat/${conversation.id}`);
+      } else {
+        toast({
+          title: "Unable to open chat",
+          description: "Could not create conversation. Please try again.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      setLoadingChatBookingId(null);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start chat. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const cancelBookingMutation = useMutation({
+    mutationFn: async (bookingId: number) => {
+      setCancellingBookingId(bookingId);
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/cancel`, {
+        cancelledBy: user?.role === "provider" ? "provider" : "customer",
+        cancelReason
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setCancellingBookingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({
+        title: "Booking Cancelled",
+        description: data.message || "Your booking has been cancelled.",
+      });
+    },
+    onError: (error: Error) => {
+      setCancellingBookingId(null);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel booking. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rebookMutation = useMutation({
+    mutationFn: async ({ serviceId, hours }: { serviceId: number; hours: number }) => {
+      setRebookingId(serviceId);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(10, 0, 0, 0);
+      
+      const response = await apiRequest("POST", "/api/bookings", {
+        serviceId,
+        date: tomorrow.toISOString(),
+        paymentMethod: "app",
+        hours,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      setRebookingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({
+        title: "Booking Created",
+        description: "Your repeat booking has been scheduled for tomorrow at 10 AM.",
+      });
+    },
+    onError: (error: Error) => {
+      setRebookingId(null);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create booking. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const submitFeedbackMutation = useMutation({
+    mutationFn: async ({ bookingId, rating, comment, noShow }: { bookingId: number; rating: number; comment: string; noShow: boolean }) => {
+      const response = await apiRequest("POST", `/api/bookings/${bookingId}/customer-feedback`, {
+        rating,
+        comment: comment || null,
+        noShow,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      setFeedbackDialogOpen(null);
+      setFeedbackRating(5);
+      setFeedbackComment("");
+      setFeedbackNoShow(false);
+      toast({
+        title: "Feedback Submitted",
+        description: "Your feedback about the customer has been recorded.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit feedback. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const acceptBookingMutation = useMutation({
+    mutationFn: async (bookingId) => {
+      const response = await apiRequest("POST", "/api/bookings/" + bookingId + "/accept", {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({ title: "Job Accepted", description: "The customer has been notified." });
+    },
+    onError: (error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+  });
+
+  const pauseBookingMutation = useMutation({
+    mutationFn: async ({ bookingId, reason }) => {
+      const response = await apiRequest("POST", "/api/bookings/" + bookingId + "/pause", { reason });
+      return response.json();
+    },
+    onSuccess: () => {
+      setPauseDialogOpen(null);
+      setPauseReason("");
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      refetch();
+      toast({ title: "Job Paused", description: "The customer has been notified." });
+    },
+    onError: (error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+  });
+
+  const submitReviewMutation = useMutation({
+    mutationFn: async ({ bookingId, rating, comment }) => {
+      const response = await apiRequest("POST", "/api/reviews", { bookingId, rating, comment });
+      return response.json();
+    },
+    onSuccess: () => {
+      setReviewDialogOpen(null);
+      setReviewRating(5);
+      setReviewComment("");
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      toast({ title: "Review Submitted", description: "Thank you for your feedback!" });
+    },
+    onError: (error) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+  });
+
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'accepted': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40';
+      case 'completed': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40';
+      case 'cancelled': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40';
+      case 'provider_noshow':
+      case 'customer_noshow': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/40';
+      default: return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40';
+    }
+  };
+
+  const getStatusBgClass = (status: string) => {
+    switch(status) {
+      case 'accepted': return 'bg-green-500';
+      case 'completed': return 'bg-blue-500';
+      case 'cancelled': return 'bg-red-500';
+      case 'provider_noshow':
+      case 'customer_noshow': return 'bg-orange-500';
+      default: return 'bg-amber-500';
+    }
+  };
+
+  const canCancel = (status: string) => {
+    return status === 'pending' || status === 'accepted';
+  };
+
+  const isProvider = user?.role === "provider";
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      
+      <main className="container mx-auto px-4 py-8 max-w-4xl">
+        <h1 className="text-3xl font-bold mb-8">{t("nav.bookings")}</h1>
+
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : !bookings || bookings.length === 0 ? (
+          <div className="text-center py-12 bg-secondary/30 rounded-2xl border border-dashed border-border">
+            <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium">{t("home.noServices")}</h3>
+            <p className="text-muted-foreground">{t("home.expertsNearby")}</p>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {bookings.map((booking) => {
+              const isChatLoading = loadingChatBookingId === booking.id;
+              const isCancelling = cancellingBookingId === booking.id;
+              const isRebooking = rebookingId === booking.serviceId;
+              const showCancelButton = canCancel(booking.status);
+              const showRebookButton = booking.status === 'completed' && user?.role === 'customer';
+              const showAcceptButton = isProvider && booking.status === 'pending';
+              const showPauseButton = isProvider && booking.status === 'accepted';
+              const showCompleteButton = isProvider && booking.status === 'accepted';
+              const canReview = !isProvider && (booking.status === 'completed' || booking.status === 'cancelled');
+              
+              return (
+                <Card key={booking.id} className="overflow-hidden hover:shadow-md transition-shadow" data-testid={`booking-card-${booking.id}`}>
+                  <CardContent className="p-0 flex flex-col sm:flex-row">
+                    <div className={`w-full h-1 sm:w-2 sm:h-auto ${getStatusBgClass(booking.status)}`} />
+                    
+                    <div className="p-6 flex-1">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                         <div>
+                           <h3 className="text-lg font-bold">{booking.service.title}</h3>
+                           <p className="text-sm text-muted-foreground">Booking #{booking.id}</p>
+                         </div>
+                         {isProvider && (booking.jobDescription || booking.urgencyLevel || booking.estimatedBudget) && (
+                        <div className="bg-muted/40 rounded-lg p-3 mb-4 space-y-1 text-sm">
+                          <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wide mb-2">Job Details</p>
+                          {booking.jobDescription && <p><span className="font-medium">Description:</span> {booking.jobDescription}</p>}
+                          {booking.urgencyLevel && <p><span className="font-medium">Urgency:</span> <span className="capitalize">{booking.urgencyLevel}</span></p>}
+                          {booking.estimatedBudget && <p><span className="font-medium">Budget:</span> </p>}
+                          {booking.jobSize && <p><span className="font-medium">Job Size:</span> <span className="capitalize">{booking.jobSize}</span></p>}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                           <Badge className={`${getStatusColor(booking.status)} border-none capitalize`}>
+                             {booking.status.replace('_', ' ')}
+                           </Badge>
+                           {booking.paymentMethod === 'cash' && (
+                             <Badge variant="outline" className="text-xs">
+                               Cash Payment
+                             </Badge>
+                           )}
+                         </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Calendar className="w-4 h-4 text-primary" />
+                          <span className="font-medium text-foreground">{format(new Date(booking.date), 'MMMM d, yyyy')}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Clock className="w-4 h-4 text-primary" />
+                          <span className="font-medium text-foreground">{format(new Date(booking.date), 'h:mm a')}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <MapPin className="w-4 h-4 text-primary" />
+                          <span>Service Location</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startChatMutation.mutate(booking.id)}
+                          disabled={isChatLoading || startChatMutation.isPending}
+                          data-testid={`button-chat-${booking.id}`}
+                        >
+                          {isChatLoading ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <MessageSquare className="w-4 h-4 mr-2" />
+                          )}
+                          {isChatLoading ? t("common.loading") : t("nav.messages")}
+                        </Button>
+
+                        {showRebookButton && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => rebookMutation.mutate({ serviceId: booking.serviceId, hours: booking.hours })}
+                            disabled={isRebooking || rebookMutation.isPending}
+                            data-testid={`button-rebook-${booking.id}`}
+                          >
+                            {isRebooking ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-4 h-4 mr-2" />
+                            )}
+                            {isRebooking ? t("common.loading") : "Book Again"}
+                          </Button>
+                        )}
+
+                        {showAcceptButton && (
+                          <Button size="sm" onClick={() => acceptBookingMutation.mutate(booking.id)} disabled={acceptBookingMutation.isPending}>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Accept Job
+                          </Button>
+                        )}
+
+                        {showPauseButton && (
+                          <Dialog open={pauseDialogOpen === booking.id} onOpenChange={(open) => { if (open) setPauseDialogOpen(booking.id); else setPauseDialogOpen(null); }}>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm"><PauseCircle className="w-4 h-4 mr-2" />Pause Job</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader><DialogTitle>Pause Job</DialogTitle><DialogDescription>Why are you pausing this job?</DialogDescription></DialogHeader>
+                              <Textarea placeholder="Reason for pausing..." value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} />
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setPauseDialogOpen(null)}>Cancel</Button>
+                                <Button onClick={() => pauseBookingMutation.mutate({ bookingId: booking.id, reason: pauseReason })} disabled={pauseBookingMutation.isPending}>Confirm Pause</Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+
+                        {showCompleteButton && (
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => { if(confirm("Mark this job as finished?")) { apiRequest("POST", "/api/bookings/" + booking.id + "/complete", {}).then(() => { queryClient.invalidateQueries({ queryKey: ["/api/bookings"] }); refetch(); toast({ title: "Job Completed!" }); }); } }}>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Job Finished
+                          </Button>
+                        )}
+
+                        {canReview && (
+                          <Dialog open={reviewDialogOpen === booking.id} onOpenChange={(open) => { if (open) setReviewDialogOpen(booking.id); else setReviewDialogOpen(null); }}>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm"><Star className="w-4 h-4 mr-2" />Leave Review</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader><DialogTitle>Leave a Review</DialogTitle><DialogDescription>How was your experience?</DialogDescription></DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <div className="flex gap-1">
+                                  {[1,2,3,4,5].map((star) => (
+                                    <button key={star} type="button" onClick={() => setReviewRating(star)}>
+                                      <Star className={"w-6 h-6 " + (star <= reviewRating ? "text-amber-500 fill-amber-500" : "text-muted-foreground")} />
+                                    </button>
+                                  ))}
+                                </div>
+                                <Textarea placeholder="Share your experience..." value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} />
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setReviewDialogOpen(null)}>Cancel</Button>
+                                <Button onClick={() => submitReviewMutation.mutate({ bookingId: booking.id, rating: reviewRating, comment: reviewComment })} disabled={submitReviewMutation.isPending}>Submit Review</Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+
+                        {/* Rate Customer button for providers on completed bookings */}
+                        {isProvider && (booking.status === 'completed' || booking.status === 'customer_noshow') && (
+                          <Dialog open={feedbackDialogOpen === booking.id} onOpenChange={(open) => {
+                            if (open) {
+                              setFeedbackDialogOpen(booking.id);
+                              setFeedbackNoShow(booking.status === 'customer_noshow');
+                            } else {
+                              setFeedbackDialogOpen(null);
+                            }
+                          }}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                data-testid={`button-rate-customer-${booking.id}`}
+                              >
+                                <UserCheck className="w-4 h-4 mr-2" />
+                                Rate Customer
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Rate Customer</DialogTitle>
+                                <DialogDescription>
+                                  Share your experience working with this customer.
+                                </DialogDescription>
+                              </DialogHeader>
+                              
+                              <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                  <Label>Rating</Label>
+                                  <div className="flex gap-1">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <button
+                                        key={star}
+                                        type="button"
+                                        onClick={() => setFeedbackRating(star)}
+                                        className="p-1"
+                                      >
+                                        <Star 
+                                          className={`w-6 h-6 ${star <= feedbackRating ? 'text-amber-500 fill-amber-500' : 'text-muted-foreground'}`}
+                                        />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <Label htmlFor="comment">Comment (optional)</Label>
+                                  <Textarea
+                                    id="comment"
+                                    placeholder="How was your experience with this customer?"
+                                    value={feedbackComment}
+                                    onChange={(e) => setFeedbackComment(e.target.value)}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox 
+                                    id="noshow" 
+                                    checked={feedbackNoShow}
+                                    onCheckedChange={(checked) => setFeedbackNoShow(checked as boolean)}
+                                  />
+                                  <Label htmlFor="noshow" className="text-sm font-normal">
+                                    Customer was not at the location (no-show)
+                                  </Label>
+                                </div>
+                              </div>
+                              
+                              <DialogFooter>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setFeedbackDialogOpen(null)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  onClick={() => submitFeedbackMutation.mutate({
+                                    bookingId: booking.id,
+                                    rating: feedbackRating,
+                                    comment: feedbackComment,
+                                    noShow: feedbackNoShow,
+                                  })}
+                                  disabled={submitFeedbackMutation.isPending}
+                                >
+                                  {submitFeedbackMutation.isPending ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  ) : null}
+                                  Submit Feedback
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+
+                        {showCancelButton && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-destructive border-destructive/50"
+                                disabled={isCancelling}
+                                data-testid={`button-cancel-${booking.id}`}
+                              >
+                                {isCancelling ? (
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                  <X className="w-4 h-4 mr-2" />
+                                )}
+                                Cancel
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="flex items-center gap-2">
+                                  <AlertTriangle className="w-5 h-5 text-destructive" />
+                                  Cancel Booking
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="space-y-3">
+                                  <p>Are you sure you want to cancel this booking for <strong>{booking.service.title}</strong>?</p>
+                                  
+                                  <div className="bg-muted/50 p-3 rounded-md text-sm space-y-2">
+                                    <p className="font-medium text-foreground">Refund Policy:</p>
+                                    {isProvider ? (
+                                      <p className="text-green-600 dark:text-green-400">
+                                        As a provider, if you cancel, the customer will receive a full refund.
+                                      </p>
+                                    ) : (
+                                      <p className="text-amber-600 dark:text-amber-400">
+                                        Customer cancellations are not eligible for refunds. Only provider cancellations or no-shows result in refunds.
+                                      </p>
+                                    )}
+                                  </div>
+                                                                  {isProvider && (
+                                    <Textarea
+                                      className="mt-2"
+                                      placeholder="Reason for cancelling..."
+                                      value={cancelReason}
+                                      onChange={(e) => setCancelReason(e.target.value)}
+                                    />
+                                  )}
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => cancelBookingMutation.mutate(booking.id)}
+                                >
+                                  Yes, Cancel Booking
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-secondary/20 p-6 flex flex-col justify-center items-end min-w-[150px] border-t sm:border-t-0 sm:border-l">
+                      <span className="text-xs text-muted-foreground uppercase font-bold">Total</span>
+                      <span className="text-2xl font-bold text-primary">${booking.service.price}</span>
+                      {booking.depositPaid && (
+                        <span className="text-xs text-green-600 dark:text-green-400 font-medium mt-1 flex items-center">
+                          Deposit Paid
+                        </span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+===ROUTES===
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { api } from "@shared/routes";
+import { z } from "zod";
+import session from "express-session";
+import passport from "passport";
+import { Strategy as LocalStrategy } from "passport-local";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import { insertUserSchema, users } from "@shared/schema";
+import pgSession from "connect-pg-simple";
+import { pool, db } from "./db";
+import { eq } from "drizzle-orm";
+import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
+
+const PLATFORM_COMMISSION_RATE = 0.15; // 15% commission
+const PREMIUM_PRICE_CENTS = 2700; // $27/month premium subscription
+
+export async function registerRoutes(
+  httpServer: Server,
+  app: Express
+): Promise<Server> {
+  // Auth Setup
+  const PGStore = pgSession(session);
+  
+  app.use(session({
+    store: new PGStore({ pool, createTableIfMissing: true }),
+    secret: process.env.SESSION_SECRET || "secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 } // 30 days
+  }));
+
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  passport.use(new LocalStrategy(async (username, password, done) => {
+    try {
+      let user = await storage.getUserByUsername(username);
+      if (!user) user = await storage.getUserByEmail(username);
+      if (!user) return done(null, false, { message: "Incorrect username." });
+      // In a real app, compare hashed passwords. For MVP, simple comparison (NOT SECURE for production)
+      if (user.password === 'google-oauth') return done(null, false, { message: "This account uses Google login." });
+      const bcrypt = await import("bcryptjs");
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) return done(null, false, { message: "Incorrect password." });
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
+  }));
+
+  passport.serializeUser((user: any, done) => done(null, user.id));
+  passport.deserializeUser(async (id: number, done) => {
+    try {
+      const user = await storage.getUser(id);
+      done(null, user);
+    } catch (err) {
+      done(err);
+    }
+  });
+
+  // Auth Routes
+  app.post(api.auth.register.path, async (req, res) => {
+    try {
+      const input = api.auth.register.input.parse(req.body);
+      const { referralCode } = req.body;
+      const existing = await storage.getUserByUsername(input.username);
+      if (existing) return res.status(400).json({ message: "Username already exists" });
+      
+      // Check if referral code is valid
+      let referrerId: number | undefined;
+      if (referralCode) {
+        const referrer = await storage.getUserByReferralCode(referralCode);
+        if (referrer) {
+          referrerId = referrer.id;
+        }
+      }
+      
+      const bcrypt = await import("bcryptjs");
+      input.password = await bcrypt.hash(input.password, 10);
+      const user = await storage.createUser({
+        ...input,
+        referredBy: referrerId,
+      });
+      
+      // Create referral record if valid referrer
+      if (referrerId) {
+        await storage.createReferral({
+          referrerId,
+          referredId: user.id,
+          status: "pending",
+          rewardAmount: 500, // $5 reward
+        });
+      }
+      
+      req.login(user, (err) => {
+        if (err) return res.status(500).json({ message: "Login failed after registration" });
+        res.status(201).json(user);
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        res.status(400).json({ message: err.errors[0].message });
+      } else {
+        console.error("Registration error:", err);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
+    }
+  });
+
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.NODE_ENV === 'production'
+      ? 'https://certigo-app-production.up.railway.app/auth/google/callback'
+      : 'http://localhost:5000/auth/google/callback',
+  }, async (accessToken, refreshToken, profile, done) => {
+    try {
+      const email = profile.emails?.[0]?.value;
+      if (!email) return done(new Error('No email from Google'));
+      let [user] = await db.select().from(users).where(eq(users.username, email));
+      if (!user) {
+        const [newUser] = await db.insert(users).values({
+          username: email,
+          password: 'google-oauth',
+          name: profile.displayName || email,
+          role: 'customer',
+          bio: '',
+          lat: 29.7604,
+          lng: -95.3698,
+        }).returning();
+        user = newUser;
+      }
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
+  }));
+
+  app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+  app.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/login' }),
+    (req, res) => { res.redirect("/"); }
+  );
+
+  app.post(api.auth.login.path, passport.authenticate("local"), (req, res) => {
+    res.status(200).json(req.user);
+  });
+
+  app.post(api.auth.logout.path, (req, res) => {
+    req.logout(() => {
+      res.status(200).send();
+    });
+  });
+
+  app.get(api.auth.me.path, (req, res) => {
+    if (req.isAuthenticated()) {
+      res.json(req.user);
+    } else {
+      res.status(401).send();
+    }
+  });
+
+  // Register object storage routes
+  registerObjectStorageRoutes(app);
+  const objectStorageService = new ObjectStorageService();
+
+  // Profile picture update
+  app.post("/api/users/change-password", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) return res.status(400).json({ message: "Missing fields" });
+      if (newPassword.length < 6) return res.status(400).json({ message: "Password too short" });
+      const user = await storage.getUser((req.user as any).id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const bcrypt = await import("bcryptjs");
+      const valid = await bcrypt.compare(currentPassword, user.password);
+      if (!valid) return res.status(401).json({ message: "Current password is incorrect" });
+      const hashed = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser((req.user as any).id, { password: hashed });
+      res.json({ message: "Password updated successfully" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to change password" });
+    }
+  });
+
+  app.patch("/api/users/profile", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const { name, username, city } = req.body;
+      if (!name || !username) return res.status(400).json({ message: "Name and username are required" });
+      const existing = await storage.getUserByUsername(username);
+      if (existing && existing.id !== (req.user as any).id) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+      const updated = await storage.updateUser((req.user as any).id, { name, username, city });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message || "Failed to update profile" });
+    }
+  });
+
+  app.patch("/api/users/profile-picture", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const { objectPath } = req.body;
+      if (!objectPath) return res.status(400).json({ message: "objectPath is required" });
+      
+      // Set ACL policy for the uploaded image to be public
+      const normalizedPath = await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+        owner: String((req.user as any).id),
+        visibility: "public",
+      });
+      
+      // Update user profile picture
+      const updatedUser = await storage.updateUserProfilePicture((req.user as any).id, normalizedPath);
+      res.json(updatedUser);
+    } catch (err) {
+      console.error("Profile picture update error:", err);
+      res.status(500).json({ message: "Failed to update profile picture" });
+    }
+  });
+
+  // Generate referral code for user
+  app.post("/api/users/generate-referral-code", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const user = req.user as any;
+      if (user.referralCode) {
+        return res.json({ referralCode: user.referralCode });
+      }
+      const code = `CERTI${user.id}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const updatedUser = await storage.updateUserReferralCode(user.id, code);
+      res.json({ referralCode: updatedUser.referralCode });
+    } catch (err) {
+      console.error("Generate referral code error:", err);
+      res.status(500).json({ message: "Failed to generate referral code" });
+    }
+  });
+
+  // Get referral stats
+  app.get("/api/users/referral-stats", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const userId = (req.user as any).id;
+      const referrals = await storage.getReferralsByReferrer(userId);
+      const completed = referrals.filter(r => r.status === "completed" || r.status === "rewarded");
+      const totalRewards = referrals
+        .filter(r => r.status === "rewarded")
+        .reduce((sum, r) => sum + r.rewardAmount, 0);
+      res.json({
+        totalReferrals: referrals.length,
+        completedReferrals: completed.length,
+        pendingReferrals: referrals.filter(r => r.status === "pending").length,
+        totalRewardsEarned: totalRewards,
+      });
+    } catch (err) {
+      console.error("Get referral stats error:", err);
+      res.status(500).json({ message: "Failed to get referral stats" });
+    }
+  });
+
+  // Service Packages Routes
+  app.get("/api/service-packages", async (req, res) => {
+    const providerId = typeof req.query.providerId === 'string' ? parseInt(req.query.providerId) : undefined;
+    if (!providerId) return res.status(400).json({ message: "providerId required" });
+    const packages = await storage.getServicePackagesByProvider(providerId);
+    res.json(packages);
+  });
+
+  app.post("/api/service-packages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user as any;
+    if (user.role !== "provider") return res.status(403).json({ message: "Only providers can create packages" });
+    try {
+      const { title, description, serviceIds, totalPrice } = req.body;
+      if (!title || !description || !serviceIds || !totalPrice) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      // Parse service IDs and validate provider owns all services
+      let serviceIdArray: number[];
+      try {
+        serviceIdArray = JSON.parse(serviceIds);
+        if (!Array.isArray(serviceIdArray) || serviceIdArray.length === 0) {
+          return res.status(400).json({ message: "serviceIds must be a non-empty array" });
+        }
+      } catch {
+        return res.status(400).json({ message: "Invalid serviceIds format" });
+      }
+      
+      // Verify provider owns all services and calculate original price
+      let originalPrice = 0;
+      for (const id of serviceIdArray) {
+        const service = await storage.getService(id);
+        if (!service) {
+          return res.status(400).json({ message: `Service ${id} not found` });
+        }
+        if (service.providerId !== user.id) {
+          return res.status(403).json({ message: "You can only bundle your own services" });
+        }
+        originalPrice += service.price * 100; // Convert to cents
+      }
+      
+      const pkg = await storage.createServicePackage({
+        providerId: user.id,
+        title,
+        description,
+        serviceIds,
+        totalPrice: parseInt(totalPrice),
+        originalPrice,
+        isActive: true,
+      });
+      res.status(201).json(pkg);
+    } catch (err) {
+      console.error("Create package error:", err);
+      res.status(500).json({ message: "Failed to create package" });
+    }
+  });
+
+  app.delete("/api/service-packages/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const pkg = await storage.getServicePackage(parseInt(req.params.id));
+      if (!pkg) return res.status(404).json({ message: "Package not found" });
+      if (pkg.providerId !== (req.user as any).id) {
+        return res.status(403).json({ message: "You can only delete your own packages" });
+      }
+      await storage.deleteServicePackage(parseInt(req.params.id));
+      res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ message: "Failed to delete package" });
+    }
+  });
+
+  // Services Routes
+  app.get(api.services.list.path, async (req, res) => {
+    const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const services = await storage.getServices({ category, search });
+    res.json(services);
+  });
+
+  app.get(api.services.get.path, async (req, res) => {
+    const service = await storage.getService(Number(req.params.id));
+    if (!service) return res.status(404).json({ message: "Service not found" });
+    res.json(service);
+  });
+
+  
+  app.patch("/api/services/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const serviceId = Number(req.params.id);
+      const service = await storage.getService(serviceId);
+      if (!service) return res.status(404).json({ message: "Service not found" });
+      if (service.providerId !== (req.user as any).id) return res.status(403).json({ message: "Not authorized" });
+      const { title, description, price, category } = req.body;
+      const updated = await storage.updateService(serviceId, { title, description, price: Number(price), category });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post(api.services.create.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const input = api.services.create.input.parse(req.body);
+      const service = await storage.createService(input);
+      res.status(201).json(service);
+    } catch (err) {
+      if (err instanceof z.ZodError) res.status(400).json(err);
+      else res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // Bookings Routes
+  app.post(api.bookings.create.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const user = req.user as any;
+      const input = api.bookings.create.input.parse({
+        ...req.body,
+        customerId: user.id, // Always use authenticated user's ID
+        date: new Date(req.body.date),
+        // Accept new per-job fields
+        estimatedBudget: req.body.estimatedBudget || null,
+        jobSize: req.body.jobSize || null,
+        estimatedDuration: req.body.estimatedDuration || null,
+        urgencyLevel: req.body.urgencyLevel || "flexible",
+        jobDescription: req.body.jobDescription || null,
+      });
+      const booking = await storage.createBooking(input);
+      
+      // Get service and customer info for notification
+      const service = await storage.getService(booking.serviceId);
+      const customer = await storage.getUser(booking.customerId);
+      
+      if (service && customer) {
+        // Notify provider of new booking
+        await storage.createNotification({
+          userId: service.providerId,
+          type: "booking_new",
+          title: "New Booking Request!",
+          body: `${customer.name} wants to book ${service.title} on ${new Date(booking.date).toLocaleDateString()}`,
+          metadata: JSON.stringify({ bookingId: booking.id, serviceId: service.id }),
+        });
+        
+        // Confirm to customer
+        await storage.createNotification({
+          userId: booking.customerId,
+          type: "booking_confirmed",
+          title: "Booking Confirmed",
+          body: `Your booking for ${service.title} has been submitted. The provider will contact you soon.`,
+          metadata: JSON.stringify({ bookingId: booking.id, serviceId: service.id }),
+        });
+      }
+      
+      res.status(201).json(booking);
+    } catch (err) {
+       if (err instanceof z.ZodError) res.status(400).json(err);
+       else res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get(api.bookings.list.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    // @ts-ignore
+    const userRole = req.user.role as 'customer' | 'provider';
+    // @ts-ignore
+    const userId = req.user.id;
+    const bookings = await storage.getBookings(userId, userRole);
+    res.json(bookings);
+  });
+
+  // Reviews
+  app.post(api.reviews.create.path, async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const { bookingId, rating, comment } = req.body;
+      if (!bookingId || !rating || !comment) return res.status(400).json({ message: "bookingId, rating and comment are required" });
+      const booking = await storage.getBooking(Number(bookingId));
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      if (booking.customerId !== (req.user as any).id) return res.status(403).json({ message: "Not authorized" });
+      if (booking.status !== "completed" && booking.status !== "cancelled") return res.status(400).json({ message: "Can only review completed or cancelled bookings" });
+      const input = { bookingId: Number(bookingId), serviceId: booking.serviceId, customerId: booking.customerId, rating: Number(rating), comment };
+      const review = await storage.createReview(input);
+      
+      // Notify provider of new review
+      const service = await storage.getService(input.serviceId);
+      const customer = await storage.getUser(input.customerId);
+      if (service && customer) {
+        await storage.createNotification({
+          userId: service.providerId,
+          type: "review_received",
+          title: "New Review Received!",
+          body: `${customer.name} left a ${input.rating}-star review for ${service.title}`,
+          metadata: JSON.stringify({ reviewId: review.id, serviceId: service.id }),
+        });
+      }
+      
+      res.status(201).json(review);
+    } catch (err) {
+      if (err instanceof z.ZodError) res.status(400).json(err);
+      else res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // Payment Routes
+  
+  // Get Stripe publishable key
+  app.get("/api/stripe/config", async (req, res) => {
+    try {
+      const publishableKey = await getStripePublishableKey();
+      res.json({ publishableKey });
+    } catch (err) {
+      console.error('Error getting Stripe config:', err);
+      res.status(500).json({ message: "Failed to get Stripe configuration" });
+    }
+  });
+
+  // Create checkout session for a booking
+  app.post("/api/checkout", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const { serviceId, bookingId, hours = 1 } = req.body;
+      
+      // Get the service details
+      const service = await storage.getService(serviceId);
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+
+      // Calculate amounts (in cents)
+      const totalAmount = service.price * hours * 100; // Convert to cents
+      const platformFee = Math.round(totalAmount * PLATFORM_COMMISSION_RATE);
+      const providerPayout = totalAmount - platformFee;
+
+      // Create the booking if not provided
+      let finalBookingId = bookingId;
+      if (!bookingId) {
+        const booking = await storage.createBooking({
+          customerId: (req.user as any).id,
+          serviceId,
+          date: new Date(),
+          status: "pending",
+        });
+        finalBookingId = booking.id;
+      }
+
+      // Create transaction record
+      const transaction = await storage.createTransaction({
+        bookingId: finalBookingId,
+        customerId: (req.user as any).id,
+        providerId: service.providerId,
+        serviceId,
+        amount: totalAmount,
+        platformFee,
+        providerPayout,
+        status: "pending",
+      });
+
+      // Create Stripe checkout session
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: service.title,
+                description: `${hours} hour(s) of ${service.category} service by ${service.provider.name}`,
+              },
+              unit_amount: totalAmount,
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        success_url: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/payment/cancel`,
+        metadata: {
+          transactionId: transaction.id.toString(),
+          bookingId: finalBookingId.toString(),
+        },
+      });
+
+      // Update transaction with checkout session ID
+      await storage.updateTransactionStatus(transaction.id, "pending", undefined);
+      
+      // Store the session ID in a way we can reference
+      await pool.query(
+        'UPDATE transactions SET stripe_checkout_session_id = $1 WHERE id = $2',
+        [session.id, transaction.id]
+      );
+
+      res.json({ url: session.url, sessionId: session.id });
+    } catch (err) {
+      console.error('Checkout error:', err);
+      res.status(500).json({ message: "Failed to create checkout session" });
+    }
+  });
+
+  // Handle successful payment
+  app.post("/api/payment/confirm", async (req, res) => {
+    try {
+      const { sessionId } = req.body;
+      
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      
+      if (session.payment_status === 'paid') {
+        // Update transaction status
+        const transaction = await storage.getTransactionByCheckoutSession(sessionId);
+        if (transaction) {
+          await storage.updateTransactionStatus(
+            transaction.id, 
+            'completed', 
+            session.payment_intent as string
+          );
+          await storage.updateBookingDepositPaid(transaction.bookingId);
+          
+          // Get service and booking details
+          const service = await storage.getService(transaction.serviceId);
+          const booking = await storage.getBooking(transaction.bookingId);
+          
+          // Only update booking status to accepted if it's currently pending
+          // This prevents overwriting completed/cancelled bookings
+          if (booking && booking.status === "pending") {
+            await storage.updateBookingStatus(transaction.bookingId, "accepted");
+          }
+          
+          if (service && booking) {
+            const customer = await storage.getUser(booking.customerId);
+            const customerName = customer?.name || "A customer";
+            const formattedDate = new Date(booking.date).toLocaleDateString();
+            
+            // Send payment received notification to provider
+            // Keep amount in cents for consistency with transaction schema
+            await storage.createNotification({
+              userId: service.providerId,
+              type: "payment_received",
+              title: "Payment Received!",
+              body: `${customerName} has paid for ${service.title} on ${formattedDate}. You can start the job!`,
+              metadata: JSON.stringify({
+                bookingId: transaction.bookingId,
+                serviceId: transaction.serviceId,
+                customerId: booking.customerId,
+                amountCents: transaction.amount
+              }),
+            });
+          }
+        }
+        
+        res.json({ success: true, status: 'paid' });
+      } else {
+        res.json({ success: false, status: session.payment_status });
+      }
+    } catch (err) {
+      console.error('Payment confirmation error:', err);
+      res.status(500).json({ message: "Failed to confirm payment" });
+    }
+  });
+
+  // Get platform earnings (admin only - simplified for MVP)
+  app.get("/api/admin/earnings", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const earnings = await storage.getPlatformEarnings();
+      res.json({
+        totalEarnings: earnings.totalEarnings / 100, // Convert to dollars
+        totalTransactions: earnings.totalTransactions,
+        recentTransactions: earnings.recentTransactions.map(t => ({
+          ...t,
+          amount: t.amount / 100,
+          platformFee: t.platformFee / 100,
+          providerPayout: t.providerPayout / 100,
+        })),
+        commissionRate: PLATFORM_COMMISSION_RATE * 100, // 15%
+      });
+    } catch (err) {
+      console.error('Error fetching earnings:', err);
+      res.status(500).json({ message: "Failed to fetch earnings" });
+    }
+  });
+
+  // Get provider earnings (shows provider's net payout, not platform commission)
+  app.get("/api/provider/earnings", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const { totalEarnings, transactions: allTransactions } = await storage.getProviderEarnings(userId);
+      
+      const completedTransactions = allTransactions.filter(t => t.status === "completed");
+      const pendingTransactions = allTransactions.filter(t => t.status === "pending");
+      const pendingPayouts = pendingTransactions.reduce((sum, t) => sum + t.providerPayout, 0);
+      
+      res.json({
+        totalEarnings: totalEarnings / 100,
+        totalJobs: completedTransactions.length,
+        pendingPayouts: pendingPayouts / 100,
+        recentTransactions: allTransactions.slice(0, 10).map(t => ({
+          ...t,
+          amount: t.amount / 100,
+          platformFee: t.platformFee / 100,
+          providerPayout: t.providerPayout / 100,
+        })),
+      });
+    } catch (err) {
+      console.error('Provider earnings error:', err);
+      res.status(500).json({ message: "Failed to fetch earnings" });
+    }
+  });
+
+  // Cancel booking (with refund rules)
+  app.post("/api/bookings/:id/cancel", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const { cancelledBy, cancelReason } = req.body;
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      // Verify the user is authorized to cancel
+      const service = await storage.getService(booking.serviceId);
+      if (!service) return res.status(404).json({ message: "Service not found" });
+      
+      const isCustomer = booking.customerId === userId;
+      const isProvider = service.providerId === userId;
+      
+      if (!isCustomer && !isProvider) {
+        return res.status(403).json({ message: "Not authorized to cancel this booking" });
+      }
+      
+      // Calculate time until booking
+      const hoursUntilBooking = (new Date(booking.date).getTime() - Date.now()) / (1000 * 60 * 60);
+      
+      // Get transaction for this booking
+      const transaction = await storage.getTransactionByBookingId(bookingId);
+      
+      let refundEligible = false;
+      let refundReason = "";
+      
+      if (cancelledBy === "provider" || isProvider) {
+        // Provider cancels or no-shows → Full refund to customer
+        refundEligible = true;
+        refundReason = "Provider cancelled - full refund";
+      } else if (isCustomer) {
+        // Customer cancels → No refund regardless of timing
+        // Only provider cancellations/no-shows result in refunds
+        refundEligible = false;
+        if (hoursUntilBooking < 24) {
+          refundReason = "Customer cancelled within 24 hours - no refund";
+        } else {
+          refundReason = "Customer cancelled - no refund per policy";
+        }
+      }
+      
+      // Update booking status
+      await storage.cancelBooking(bookingId, cancelledBy || (isProvider ? "provider" : "customer"), cancelReason);
+      
+      // Process refund if eligible and payment was made via app
+      if (refundEligible && transaction && transaction.status === "completed" && booking.paymentMethod === "app") {
+        try {
+          const stripe = await getUncachableStripeClient();
+          
+          if (transaction.stripePaymentIntentId) {
+            const refund = await stripe.refunds.create({
+              payment_intent: transaction.stripePaymentIntentId,
+            });
+            
+            await storage.updateTransactionRefund(transaction.id, refund.id, refundReason);
+          }
+          
+          return res.json({ 
+            success: true, 
+            refunded: true, 
+            message: "Booking cancelled and refund processed" 
+          });
+        } catch (refundErr) {
+          console.error('Refund error:', refundErr);
+          return res.json({ 
+            success: true, 
+            refunded: false, 
+            message: "Booking cancelled but refund failed - please contact support" 
+          });
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        refunded: false, 
+        message: refundEligible ? "Booking cancelled" : `Booking cancelled - ${refundReason}` 
+      });
+    } catch (err) {
+      console.error('Cancel booking error:', err);
+      res.status(500).json({ message: "Failed to cancel booking" });
+    }
+  });
+
+  // Mark provider no-show (customer reports)
+  app.post("/api/bookings/:id/provider-noshow", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      if (booking.customerId !== userId) {
+        return res.status(403).json({ message: "Only the customer can report provider no-show" });
+      }
+      
+      // Update booking status to provider_noshow
+      await storage.updateBookingStatus(bookingId, "provider_noshow");
+      
+      // Process full refund only for app payments
+      if (booking.paymentMethod === "app") {
+        const transaction = await storage.getTransactionByBookingId(bookingId);
+        if (transaction && transaction.status === "completed" && transaction.stripePaymentIntentId) {
+          try {
+            const stripe = await getUncachableStripeClient();
+            const refund = await stripe.refunds.create({
+              payment_intent: transaction.stripePaymentIntentId,
+            });
+            await storage.updateTransactionRefund(transaction.id, refund.id, "Provider no-show - full refund");
+            return res.json({ success: true, message: "Provider no-show reported - full refund processed" });
+          } catch (refundErr) {
+            console.error('Refund error:', refundErr);
+            return res.json({ success: true, message: "Provider no-show reported - refund pending, contact support" });
+          }
+        }
+      }
+      
+      // For cash payments, no refund needed (no payment was made through the app)
+      res.json({ 
+        success: true, 
+        message: booking.paymentMethod === "cash" 
+          ? "Provider no-show reported - no app payment was made" 
+          : "Provider no-show reported"
+      });
+    } catch (err) {
+      console.error('Provider no-show error:', err);
+      res.status(500).json({ message: "Failed to process no-show report" });
+    }
+  });
+
+  // Mark customer no-show (provider reports)
+  app.post("/api/bookings/:id/customer-noshow", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) {
+        return res.status(403).json({ message: "Only the provider can report customer no-show" });
+      }
+      
+      // Update booking status - customer no-shows don't get refunds
+      await storage.updateBookingStatus(bookingId, "customer_noshow");
+      
+      res.json({ success: true, message: "Customer no-show recorded - no refund issued per policy" });
+    } catch (err) {
+      console.error('Customer no-show error:', err);
+      res.status(500).json({ message: "Failed to process no-show report" });
+    }
+  });
+
+  // Mark booking as completed (provider action)
+  app.post("/api/bookings/:id/complete", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) {
+        return res.status(403).json({ message: "Only the provider can mark booking as complete" });
+      }
+      
+      if (booking.status !== "accepted") {
+        return res.status(400).json({ message: "Only accepted bookings can be marked as complete" });
+      }
+      
+      await storage.updateBookingStatus(bookingId, "completed");
+      
+      // Check if this is the customer's first completed booking and process referral
+      const customer = await storage.getUser(booking.customerId);
+      if (customer && customer.referredBy) {
+        // Check if customer has a pending referral
+        const referrer = await storage.getUser(customer.referredBy);
+        if (referrer) {
+          const referrals = await storage.getReferralsByReferrer(referrer.id);
+          const pendingReferral = referrals.find(
+            r => r.referredId === booking.customerId && r.status === "pending"
+          );
+          
+          if (pendingReferral) {
+            // Mark referral as completed and award bonus
+            await storage.updateReferralStatus(pendingReferral.id, "rewarded");
+            
+            // Add reward to referrer's balance
+            await storage.addToReferralBalance(referrer.id, pendingReferral.rewardAmount);
+            
+            // Notify referrer of reward
+            await storage.createNotification({
+              userId: referrer.id,
+              type: "referral_reward",
+              title: "Referral Reward Earned!",
+              body: `You earned $5.00 for referring ${customer.name}! They completed their first booking.`,
+              metadata: JSON.stringify({ referralId: pendingReferral.id, amount: 500 }),
+            });
+          }
+        }
+      }
+      
+      // Notify customer
+      await storage.createNotification({
+        userId: booking.customerId,
+        type: "booking_completed",
+        title: "Service Completed",
+        body: `Your booking for ${service.title} has been marked as completed. Please leave a review!`,
+        metadata: JSON.stringify({ bookingId: booking.id, serviceId: service.id }),
+      });
+      
+      res.json({ success: true, message: "Booking marked as completed" });
+    } catch (err) {
+      console.error('Complete booking error:', err);
+      res.status(500).json({ message: "Failed to complete booking" });
+    }
+  });
+
+  // Premium subscription - create checkout
+  app.post("/api/premium/subscribe", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    if ((req.user as any).role !== 'provider') {
+      return res.status(403).json({ message: "Only providers can subscribe to premium" });
+    }
+    
+    try {
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: 'CertiGo Premium',
+                description: 'Verified Pro badge, higher ranking, advanced analytics, and more!',
+              },
+              unit_amount: PREMIUM_PRICE_CENTS,
+              recurring: {
+                interval: 'month',
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'subscription',
+        success_url: `${baseUrl}/premium/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/premium`,
+        metadata: {
+          userId: (req.user as any).id.toString(),
+          type: 'premium_subscription',
+        },
+      });
+      
+      res.json({ url: session.url, sessionId: session.id });
+    } catch (err) {
+      console.error('Premium subscription error:', err);
+      res.status(500).json({ message: "Failed to create subscription" });
+    }
+  });
+
+  // Confirm premium subscription
+  app.post("/api/premium/confirm", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const { sessionId } = req.body;
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      
+      if (session.payment_status === 'paid' && session.subscription) {
+        const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
+        const premiumExpiresAt = new Date((subscription as any).current_period_end * 1000);
+        
+        await storage.updateUserPremium(
+          (req.user as any).id,
+          true,
+          premiumExpiresAt,
+          subscription.id
+        );
+        
+        res.json({ success: true, premiumExpiresAt });
+      } else {
+        res.json({ success: false, message: "Subscription not active" });
+      }
+    } catch (err) {
+      console.error('Premium confirmation error:', err);
+      res.status(500).json({ message: "Failed to confirm subscription" });
+    }
+  });
+
+  // Get premium status
+  app.get("/api/premium/status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    const user = req.user as any;
+    res.json({
+      isPremium: user.isPremium,
+      premiumExpiresAt: user.premiumExpiresAt,
+    });
+  });
+
+  // === NOTIFICATIONS ===
+  
+  // Get user notifications
+  app.get("/api/notifications", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const notifications = await storage.getNotifications(userId);
+      const unreadCount = await storage.getUnreadNotificationCount(userId);
+      res.json({ notifications, unreadCount });
+    } catch (err) {
+      console.error('Notifications error:', err);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  // Mark notification as read
+  app.post("/api/notifications/:id/read", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const notification = await storage.markNotificationRead(Number(req.params.id));
+      res.json(notification);
+    } catch (err) {
+      console.error('Mark notification read error:', err);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  // Mark all notifications as read
+  app.post("/api/notifications/read-all", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      await storage.markAllNotificationsRead(userId);
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Mark all notifications read error:', err);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // Update user location
+  app.post("/api/user/location", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const { lat, lng } = req.body;
+      if (typeof lat !== 'number' || typeof lng !== 'number') {
+        return res.status(400).json({ message: "Invalid location" });
+      }
+      const updated = await storage.updateUserLocation((req.user as any).id, lat, lng);
+      res.json({ success: true, lat: updated.lat, lng: updated.lng });
+    } catch (err) {
+      console.error('Update location error:', err);
+      res.status(500).json({ message: "Failed to update location" });
+    }
+  });
+
+  // Provider signals arrival at customer location
+  app.post("/api/bookings/:id/arrived", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) {
+        return res.status(403).json({ message: "Only the provider can mark arrival" });
+      }
+      
+      // Notify customer that provider has arrived
+      await storage.createNotification({
+        userId: booking.customerId,
+        type: "provider_arrived",
+        title: "Your provider has arrived!",
+        body: `${service.provider.name} is at your location for ${service.title}`,
+        metadata: JSON.stringify({ bookingId, serviceId: service.id }),
+      });
+      
+      res.json({ success: true, message: "Customer has been notified of your arrival" });
+    } catch (err) {
+      console.error('Provider arrival error:', err);
+      res.status(500).json({ message: "Failed to notify arrival" });
+    }
+  });
+
+  // === CHAT ROUTES ===
+
+  // Get user's conversations
+  app.get("/api/conversations", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const conversations = await storage.getUserConversations(userId);
+      res.json(conversations);
+    } catch (err) {
+      console.error('Get conversations error:', err);
+      res.status(500).json({ message: "Failed to get conversations" });
+    }
+  });
+
+  // Get or create conversation for a booking
+  app.post("/api/bookings/:id/chat", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service) return res.status(404).json({ message: "Service not found" });
+      
+      // Only customer or provider can access the chat
+      if (booking.customerId !== userId && service.providerId !== userId) {
+        return res.status(403).json({ message: "You don't have access to this chat" });
+      }
+      
+      const conversation = await storage.getOrCreateConversation(
+        bookingId,
+        booking.customerId,
+        service.providerId
+      );
+      
+      res.json(conversation);
+    } catch (err) {
+      console.error('Get/create chat error:', err);
+      res.status(500).json({ message: "Failed to access chat" });
+    }
+  });
+
+  // Get messages in a conversation
+  app.get("/api/conversations/:id/messages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      
+      // Only participants can access
+      if (conversation.customerId !== userId && conversation.providerId !== userId) {
+        return res.status(403).json({ message: "You don't have access to this chat" });
+      }
+      
+      // Mark messages as read
+      await storage.markMessagesRead(conversationId, userId);
+      
+      const messages = await storage.getMessages(conversationId);
+      res.json(messages);
+    } catch (err) {
+      console.error('Get messages error:', err);
+      res.status(500).json({ message: "Failed to get messages" });
+    }
+  });
+
+  // Send a message
+  app.post("/api/conversations/:id/messages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      const { content } = req.body;
+      
+      if (!content || typeof content !== 'string' || content.trim().length === 0) {
+        return res.status(400).json({ message: "Message content is required" });
+      }
+      
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+      
+      // Only participants can send messages
+      if (conversation.customerId !== userId && conversation.providerId !== userId) {
+        return res.status(403).json({ message: "You don't have access to this chat" });
+      }
+      
+      const message = await storage.createMessage({
+        conversationId,
+        senderId: userId,
+        content: content.trim(),
+      });
+      
+      // Notify the other user
+      const recipientId = conversation.customerId === userId ? conversation.providerId : conversation.customerId;
+      const sender = await storage.getUser(userId);
+      
+      await storage.createNotification({
+        userId: recipientId,
+        type: "new_message",
+        title: "New Message",
+        body: `${sender?.name || 'Someone'} sent you a message`,
+        metadata: JSON.stringify({ conversationId, bookingId: conversation.bookingId }),
+      });
+      
+      res.status(201).json(message);
+    } catch (err) {
+      console.error('Send message error:', err);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // Stripe Connect - Create onboarding link for payouts
+  app.post("/api/connect/onboard", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      
+      const stripe = await getUncachableStripeClient();
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      
+      let accountId = user.stripeConnectAccountId;
+      
+      // Create a new connected account if user doesn't have one
+      if (!accountId) {
+        const account = await stripe.accounts.create({
+          type: 'express',
+          country: 'US',
+          email: user.username + '@certigo.app', // Using username as placeholder
+          capabilities: {
+            transfers: { requested: true },
+          },
+        });
+        accountId = account.id;
+        await storage.updateStripeConnectAccount(userId, accountId);
+      }
+      
+      // Create an account link for onboarding
+      const accountLink = await stripe.accountLinks.create({
+        account: accountId,
+        refresh_url: `${baseUrl}/profile?connect=refresh`,
+        return_url: `${baseUrl}/profile?connect=success`,
+        type: 'account_onboarding',
+      });
+      
+      res.json({ url: accountLink.url });
+    } catch (err) {
+      console.error('Connect onboard error:', err);
+      res.status(500).json({ message: "Failed to create onboarding link" });
+    }
+  });
+
+  // Stripe Connect - Get connect account status
+  app.get("/api/connect/status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      
+      if (!user.stripeConnectAccountId) {
+        return res.json({ 
+          connected: false,
+          balance: user.referralBalance,
+          payoutsEnabled: false,
+        });
+      }
+      
+      const stripe = await getUncachableStripeClient();
+      const account = await stripe.accounts.retrieve(user.stripeConnectAccountId);
+      
+      res.json({
+        connected: true,
+        balance: user.referralBalance,
+        payoutsEnabled: account.payouts_enabled || false,
+        chargesEnabled: account.charges_enabled || false,
+        detailsSubmitted: account.details_submitted || false,
+      });
+    } catch (err) {
+      console.error('Connect status error:', err);
+      res.status(500).json({ message: "Failed to get connect status" });
+    }
+  });
+
+  // Request payout
+  app.post("/api/payouts/request", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      
+      if (!user.stripeConnectAccountId) {
+        return res.status(400).json({ message: "Please connect your bank account first" });
+      }
+      
+      if (user.referralBalance < 500) { // Minimum $5 payout
+        return res.status(400).json({ message: "Minimum payout amount is $5" });
+      }
+      
+      const stripe = await getUncachableStripeClient();
+      
+      // Check if payouts are enabled
+      const account = await stripe.accounts.retrieve(user.stripeConnectAccountId);
+      if (!account.payouts_enabled) {
+        return res.status(400).json({ message: "Your payout account setup is incomplete. Please complete the onboarding process." });
+      }
+      
+      const amount = user.referralBalance;
+      
+      // Atomically deduct from balance first - prevents race conditions
+      const updatedUser = await storage.deductFromReferralBalance(userId, amount);
+      if (!updatedUser) {
+        return res.status(400).json({ message: "Insufficient balance or concurrent payout in progress" });
+      }
+      
+      // Create payout record after successful deduction
+      const payout = await storage.createPayout({
+        userId,
+        amount,
+        status: 'processing',
+      });
+      
+      try {
+        // Transfer to connected account
+        const transfer = await stripe.transfers.create({
+          amount,
+          currency: 'usd',
+          destination: user.stripeConnectAccountId,
+          description: `CertiGo referral rewards payout`,
+        });
+        
+        const completedPayout = await storage.updatePayoutStatus(payout.id, 'completed', transfer.id);
+        
+        // Notify user
+        await storage.createNotification({
+          userId,
+          type: "payout_completed",
+          title: "Payout Sent!",
+          body: `Your payout of $${(amount / 100).toFixed(2)} has been sent to your bank account.`,
+          metadata: JSON.stringify({ payoutId: payout.id, amount }),
+        });
+        
+        res.json({ 
+          success: true, 
+          message: `Payout of $${(amount / 100).toFixed(2)} initiated successfully`,
+          payout: completedPayout,
+        });
+      } catch (transferErr: any) {
+        // If transfer fails, refund the balance and mark payout as failed
+        await storage.addToReferralBalance(userId, amount);
+        await storage.updatePayoutStatus(payout.id, 'failed', undefined, transferErr.message);
+        
+        throw transferErr;
+      }
+    } catch (err: any) {
+      console.error('Payout request error:', err);
+      res.status(500).json({ message: err.message || "Failed to process payout" });
+    }
+  });
+
+  // Get payout history
+  app.get("/api/payouts", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const userId = (req.user as any).id;
+      const payouts = await storage.getUserPayouts(userId);
+      res.json(payouts);
+    } catch (err) {
+      console.error('Get payouts error:', err);
+      res.status(500).json({ message: "Failed to get payouts" });
+    }
+  });
+
+  // ========== ADS ROUTES ==========
+  
+  // Get active ads (public)
+  app.get("/api/ads", async (req, res) => {
+    try {
+      const placement = req.query.placement as string | undefined;
+      const ads = await storage.getActiveAds(placement);
+      res.json(ads);
+    } catch (err) {
+      console.error('Get ads error:', err);
+      res.status(500).json({ message: "Failed to get ads" });
+    }
+  });
+
+  // Note: Admin routes for ads management require a dedicated admin role.
+  // For now, ads are managed directly via database. These routes are disabled
+  // until an admin authentication system is implemented.
+  // The public GET /api/ads endpoint above is available for displaying ads.
+
+  // ========== CUSTOMER FEEDBACK (Vendor reviews of customers) ==========
+  
+  // Provider submits feedback about customer (after booking)
+  app.post("/api/bookings/:id/customer-feedback", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const bookingId = parseInt(req.params.id);
+      const userId = (req.user as any).id;
+      
+      // Get booking to verify provider
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) {
+        return res.status(403).json({ message: "Only the service provider can leave customer feedback" });
+      }
+      
+      // Check if booking is completed
+      if (booking.status !== "completed" && booking.status !== "customer_noshow") {
+        return res.status(400).json({ message: "Can only leave feedback for completed bookings" });
+      }
+      
+      // Check if feedback already exists
+      const existing = await storage.getCustomerFeedback(bookingId);
+      if (existing) {
+        return res.status(400).json({ message: "Feedback already submitted for this booking" });
+      }
+      
+      const { rating, comment, noShow } = req.body;
+      
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: "Rating must be between 1 and 5" });
+      }
+      
+      const feedback = await storage.createCustomerFeedback({
+        bookingId,
+        providerId: userId,
+        customerId: booking.customerId,
+        rating,
+        comment: comment || null,
+        noShow: noShow || false,
+      });
+      
+      res.status(201).json(feedback);
+    } catch (err) {
+      console.error('Customer feedback error:', err);
+      res.status(500).json({ message: "Failed to submit feedback" });
+    }
+  });
+
+  // Get customer feedback for a booking
+  app.get("/api/bookings/:id/customer-feedback", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    
+    try {
+      const feedback = await storage.getCustomerFeedback(parseInt(req.params.id));
+      res.json(feedback || null);
+    } catch (err) {
+      console.error('Get customer feedback error:', err);
+      res.status(500).json({ message: "Failed to get feedback" });
+    }
+  });
+
+  // Get customer's overall rating
+  app.get("/api/users/:id/customer-rating", async (req, res) => {
+    try {
+      const rating = await storage.getCustomerRating(parseInt(req.params.id));
+      res.json(rating);
+    } catch (err) {
+      console.error('Get customer rating error:', err);
+      res.status(500).json({ message: "Failed to get customer rating" });
+    }
+  });
+app.delete("/api/users/account", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const userId = (req.user as any).id;
+      await pool.query("DELETE FROM session WHERE sess::json->'passport'->>'user' = $1", [String(userId)]);
+      await pool.query("DELETE FROM users WHERE id = $1", [userId]);
+      req.logout(() => {
+        res.json({ message: "Account deleted" });
+      });
+    } catch (err: any) {
+      console.error("Delete account error:", err);
+      res.status(500).json({ message: err.message || "Failed to delete account" });
+    }
+  });
+
+  // Accept booking (provider action)
+  app.post("/api/bookings/:id/accept", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) return res.status(403).json({ message: "Not authorized" });
+      if (booking.status !== "pending") return res.status(400).json({ message: "Only pending bookings can be accepted" });
+      await storage.updateBookingStatus(bookingId, "accepted");
+      await storage.createNotification({ userId: booking.customerId, type: "booking_accepted", title: "Booking Accepted!", body: service.title + " accepted. The provider is on their way!", metadata: JSON.stringify({ bookingId, serviceId: service.id }) });
+      res.json({ success: true, message: "Booking accepted" });
+    } catch (err) { console.error("Accept booking error:", err); res.status(500).json({ message: "Failed to accept booking" }); }
+  });
+
+  // Pause booking (provider action)
+  app.post("/api/bookings/:id/pause", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      const { reason } = req.body;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      const service = await storage.getService(booking.serviceId);
+      if (!service || service.providerId !== userId) return res.status(403).json({ message: "Not authorized" });
+      if (booking.status !== "accepted") return res.status(400).json({ message: "Only accepted bookings can be paused" });
+      await storage.updateBookingStatus(bookingId, "paused");
+      if (reason) await storage.updateBookingPausedReason(bookingId, reason);
+      await storage.createNotification({ userId: booking.customerId, type: "booking_paused", title: "Job Paused", body: "Your job has been paused" + (reason ? ": " + reason : ""), metadata: JSON.stringify({ bookingId, serviceId: service.id }) });
+      res.json({ success: true, message: "Booking paused" });
+    } catch (err) { console.error("Pause booking error:", err); res.status(500).json({ message: "Failed to pause booking" }); }
+  });
+
+  // Update provider location
+  app.put("/api/users/location", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const userId = (req.user as any).id;
+      const { lat, lng } = req.body;
+      if (!lat || !lng) return res.status(400).json({ message: "lat and lng required" });
+      await storage.updateUser(userId, { lat, lng });
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ message: "Failed to update location" }); }
+  });
+
+  // Get provider location for active booking
+  app.get("/api/bookings/:id/provider-location", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const bookingId = Number(req.params.id);
+      const userId = (req.user as any).id;
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      if (booking.customerId !== userId) return res.status(403).json({ message: "Not authorized" });
+      if (booking.status !== "accepted") return res.status(400).json({ message: "Booking is not active" });
+      const service = await storage.getService(booking.serviceId);
+      if (!service) return res.status(404).json({ message: "Service not found" });
+      const provider = await storage.getUser(service.providerId);
+      if (!provider) return res.status(404).json({ message: "Provider not found" });
+      res.json({ lat: provider.lat, lng: provider.lng });
+    } catch (err) { res.status(500).json({ message: "Failed to get provider location" }); }
+  });
+  return httpServer;
+}
+
+
+
+
+
+
+
+===SCHEMA===
+import { pgTable, text, serial, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+import { relations } from "drizzle-orm";
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  name: text("name").notNull(),
+  role: text("role", { enum: ["customer", "provider"] }).default("customer").notNull(),
+  bio: text("bio"),
+  profilePicture: text("profile_picture"),
+  lat: real("lat"),
+  lng: real("lng"),
+  city: text("city"),
+  isPremium: boolean("is_premium").default(false).notNull(),
+  premiumExpiresAt: timestamp("premium_expires_at"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  referralCode: text("referral_code").unique(),
+  referredBy: integer("referred_by"),
+  stripeConnectAccountId: text("stripe_connect_account_id"),
+  referralBalance: integer("referral_balance").default(0).notNull(), // Available balance in cents
+});
+
+export const services = pgTable("services", {
+  id: serial("id").primaryKey(),
+  providerId: integer("provider_id").notNull(),
+  title: text("title").notNull(), // e.g., "Experienced Plumber"
+  description: text("description").notNull(),
+  category: text("category").notNull(), // e.g., "plumbing", "welding"
+  price: integer("price").notNull(), // Base price or starting rate
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  city: text("city"),
+  pricingType: text("pricing_type", { enum: ["fixed", "negotiable", "hourly", "free_estimate"] }).default("negotiable"),
+  responseTime: text("response_time"), // e.g., "Within 1 hour", "Same day"
+});
+
+export const bookings = pgTable("bookings", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").notNull(),
+  serviceId: integer("service_id").notNull(),
+  status: text("status", { enum: ["pending", "accepted", "paused", "completed", "cancelled", "provider_noshow", "customer_noshow"] }).default("pending").notNull(),
+  date: timestamp("date").notNull(),
+  depositPaid: boolean("deposit_paid").default(false).notNull(),
+  paymentMethod: text("payment_method", { enum: ["app", "cash", "paypal"] }).default("app").notNull(),
+  cancelledBy: text("cancelled_by", { enum: ["customer", "provider"] }),
+  cancelledAt: timestamp("cancelled_at"),
+  hours: integer("hours"), // Optional, kept for backward compat
+  // New per-job fields
+  estimatedBudget: text("estimated_budget"), // e.g. "$80-$150" or "80"
+  jobSize: text("job_size", { enum: ["small", "medium", "large", "emergency"] }),
+  estimatedDuration: text("estimated_duration"), // e.g. "1-3 hours", "half day"
+  urgencyLevel: text("urgency_level", { enum: ["flexible", "today", "asap", "emergency"] }).default("flexible"),
+  jobDescription: text("job_description"), // Customer's description of the problem
+  pausedReason: text("paused_reason"),
+  cancelReason: text("cancel_reason"),
+});
+
+export const reviews = pgTable("reviews", {
+  id: serial("id").primaryKey(),
+  serviceId: integer("service_id").notNull(),
+  customerId: integer("customer_id").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const transactions = pgTable("transactions", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull(),
+  customerId: integer("customer_id").notNull(),
+  providerId: integer("provider_id").notNull(),
+  serviceId: integer("service_id").notNull(),
+  amount: integer("amount").notNull(),
+  platformFee: integer("platform_fee").notNull(),
+  providerPayout: integer("provider_payout").notNull(),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  status: text("status", { enum: ["pending", "completed", "refunded", "failed"] }).default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  refundedAt: timestamp("refunded_at"),
+  refundReason: text("refund_reason"),
+  stripeRefundId: text("stripe_refund_id"),
+});
+
+// Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  services: many(services),
+  bookings: many(bookings),
+  reviews: many(reviews),
+}));
+
+export const servicesRelations = relations(services, ({ one, many }) => ({
+  provider: one(users, {
+    fields: [services.providerId],
+    references: [users.id],
+  }),
+  bookings: many(bookings),
+  reviews: many(reviews),
+}));
+
+export const bookingsRelations = relations(bookings, ({ one }) => ({
+  customer: one(users, {
+    fields: [bookings.customerId],
+    references: [users.id],
+  }),
+  service: one(services, {
+    fields: [bookings.serviceId],
+    references: [services.id],
+  }),
+}));
+
+export const reviewsRelations = relations(reviews, ({ one }) => ({
+  customer: one(users, {
+    fields: [reviews.customerId],
+    references: [users.id],
+  }),
+  service: one(services, {
+    fields: [reviews.serviceId],
+    references: [services.id],
+  }),
+}));
+
+export const transactionsRelations = relations(transactions, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [transactions.bookingId],
+    references: [bookings.id],
+  }),
+  customer: one(users, {
+    fields: [transactions.customerId],
+    references: [users.id],
+  }),
+  provider: one(users, {
+    fields: [transactions.providerId],
+    references: [users.id],
+  }),
+  service: one(services, {
+    fields: [transactions.serviceId],
+    references: [services.id],
+  }),
+}));
+
+// Notifications table
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  type: text("type", { 
+    enum: ["booking_new", "booking_confirmed", "booking_cancelled", "booking_completed", "booking_accepted", "booking_paused", "provider_arriving", "provider_arrived", "payment_received", "review_received", "new_message", "referral_reward", "payout_completed"] 
+  }).notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  metadata: text("metadata"), // JSON string for extra data like bookingId, serviceId
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+// Conversations for chat between customer and provider
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().unique(),
+  customerId: integer("customer_id").notNull(),
+  providerId: integer("provider_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull(),
+  senderId: integer("sender_id").notNull(),
+  content: text("content").notNull(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  booking: one(bookings, {
+    fields: [conversations.bookingId],
+    references: [bookings.id],
+  }),
+  customer: one(users, {
+    fields: [conversations.customerId],
+    references: [users.id],
+  }),
+  provider: one(users, {
+    fields: [conversations.providerId],
+    references: [users.id],
+  }),
+  messages: many(messages),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [messages.conversationId],
+    references: [conversations.id],
+  }),
+  sender: one(users, {
+    fields: [messages.senderId],
+    references: [users.id],
+  }),
+}));
+
+// Service packages (bundles of services at discounted rates)
+export const servicePackages = pgTable("service_packages", {
+  id: serial("id").primaryKey(),
+  providerId: integer("provider_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  serviceIds: text("service_ids").notNull(), // JSON array of service IDs
+  totalPrice: integer("total_price").notNull(), // Discounted bundle price in cents
+  originalPrice: integer("original_price").notNull(), // Sum of individual prices
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const servicePackagesRelations = relations(servicePackages, ({ one }) => ({
+  provider: one(users, {
+    fields: [servicePackages.providerId],
+    references: [users.id],
+  }),
+}));
+
+// Referrals tracking
+export const referrals = pgTable("referrals", {
+  id: serial("id").primaryKey(),
+  referrerId: integer("referrer_id").notNull(),
+  referredId: integer("referred_id").notNull(),
+  status: text("status", { enum: ["pending", "completed", "rewarded"] }).default("pending").notNull(),
+  rewardAmount: integer("reward_amount").default(500).notNull(), // $5 reward in cents
+  completedAt: timestamp("completed_at"),
+  rewardedAt: timestamp("rewarded_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const referralsRelations = relations(referrals, ({ one }) => ({
+  referrer: one(users, {
+    fields: [referrals.referrerId],
+    references: [users.id],
+  }),
+  referred: one(users, {
+    fields: [referrals.referredId],
+    references: [users.id],
+  }),
+}));
+
+// Payouts tracking
+export const payouts = pgTable("payouts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: integer("amount").notNull(), // Amount in cents
+  status: text("status", { enum: ["pending", "processing", "completed", "failed"] }).default("pending").notNull(),
+  stripeTransferId: text("stripe_transfer_id"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const payoutsRelations = relations(payouts, ({ one }) => ({
+  user: one(users, {
+    fields: [payouts.userId],
+    references: [users.id],
+  }),
+}));
+
+// Ads for monetization
+export const ads = pgTable("ads", {
+  id: serial("id").primaryKey(),
+  placement: text("placement", { enum: ["home_sidebar", "home_feed", "booking_confirmation", "profile"] }).notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  ctaText: text("cta_text"),
+  ctaUrl: text("cta_url"),
+  imagePath: text("image_path"),
+  isActive: boolean("is_active").default(true).notNull(),
+  startsAt: timestamp("starts_at"),
+  endsAt: timestamp("ends_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Customer feedback (vendor reviews of customers)
+export const customerFeedback = pgTable("customer_feedback", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().unique(),
+  providerId: integer("provider_id").notNull(),
+  customerId: integer("customer_id").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment"),
+  noShow: boolean("no_show").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const customerFeedbackRelations = relations(customerFeedback, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [customerFeedback.bookingId],
+    references: [bookings.id],
+  }),
+  provider: one(users, {
+    fields: [customerFeedback.providerId],
+    references: [users.id],
+  }),
+  customer: one(users, {
+    fields: [customerFeedback.customerId],
+    references: [users.id],
+  }),
+}));
+
+// Schemas
+export const insertUserSchema = createInsertSchema(users).omit({ id: true });
+export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
+export const insertBookingSchema = createInsertSchema(bookings).omit({ id: true, depositPaid: true, cancelledAt: true });
+export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
+export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true, createdAt: true });
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, readAt: true });
+export const insertConversationSchema = createInsertSchema(conversations).omit({ id: true, createdAt: true });
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, readAt: true });
+export const insertServicePackageSchema = createInsertSchema(servicePackages).omit({ id: true, createdAt: true });
+export const insertReferralSchema = createInsertSchema(referrals).omit({ id: true, createdAt: true, completedAt: true, rewardedAt: true });
+export const insertPayoutSchema = createInsertSchema(payouts).omit({ id: true, createdAt: true, completedAt: true });
+export const insertAdSchema = createInsertSchema(ads).omit({ id: true, createdAt: true });
+export const insertCustomerFeedbackSchema = createInsertSchema(customerFeedback).omit({ id: true, createdAt: true });
+
+// Types
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Service = typeof services.$inferSelect;
+export type InsertService = z.infer<typeof insertServiceSchema>;
+export type Booking = typeof bookings.$inferSelect;
+export type InsertBooking = z.infer<typeof insertBookingSchema>;
+export type Review = typeof reviews.$inferSelect;
+export type InsertReview = z.infer<typeof insertReviewSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type ServicePackage = typeof servicePackages.$inferSelect;
+export type InsertServicePackage = z.infer<typeof insertServicePackageSchema>;
+export type Referral = typeof referrals.$inferSelect;
+export type InsertReferral = z.infer<typeof insertReferralSchema>;
+export type Payout = typeof payouts.$inferSelect;
+export type InsertPayout = z.infer<typeof insertPayoutSchema>;
+export type Ad = typeof ads.$inferSelect;
+export type InsertAd = z.infer<typeof insertAdSchema>;
+export type CustomerFeedback = typeof customerFeedback.$inferSelect;
+export type InsertCustomerFeedback = z.infer<typeof insertCustomerFeedbackSchema>;
+
+===STORAGE===
+import { db } from "./db";
+import { users, services, bookings, reviews, transactions, notifications, conversations, messages, servicePackages, referrals, payouts, ads, customerFeedback, type User, type InsertUser, type Service, type InsertService, type Booking, type InsertBooking, type Review, type InsertReview, type Transaction, type InsertTransaction, type Notification, type InsertNotification, type Conversation, type InsertConversation, type Message, type InsertMessage, type ServicePackage, type InsertServicePackage, type Referral, type InsertReferral, type Payout, type InsertPayout, type Ad, type InsertAd, type CustomerFeedback, type InsertCustomerFeedback } from "@shared/schema";
+import { eq, ilike, or, sql, desc, isNull, and, lte, gte } from "drizzle-orm";
+
+export interface IStorage {
+  // Users
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByReferralCode(referralCode: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+
+  // Services
+  getServices(query?: { category?: string; search?: string }): Promise<(Service & { provider: User })[]>;
+  getService(id: number): Promise<(Service & { provider: User; reviews: Review[] }) | undefined>;
+  createService(service: InsertService): Promise<Service>;
+
+  // Bookings
+  createBooking(booking: InsertBooking): Promise<Booking>;
+  getBookings(userId: number, role: 'customer' | 'provider'): Promise<(Booking & { service: Service })[]>;
+
+  // Reviews
+  createReview(review: InsertReview): Promise<Review>;
+  getReviews(serviceId: number): Promise<Review[]>;
+
+  // Transactions
+  createTransaction(transaction: InsertTransaction): Promise<Transaction>;
+  getTransaction(id: number): Promise<Transaction | undefined>;
+  getTransactionByCheckoutSession(sessionId: string): Promise<Transaction | undefined>;
+  getTransactionByBookingId(bookingId: number): Promise<Transaction | undefined>;
+  updateTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<Transaction>;
+  updateTransactionRefund(id: number, stripeRefundId: string, reason: string): Promise<Transaction>;
+  getPlatformEarnings(): Promise<{ totalEarnings: number; totalTransactions: number; recentTransactions: Transaction[] }>;
+  getProviderEarnings(providerId: number): Promise<{ totalEarnings: number; transactions: Transaction[] }>;
+  updateBookingDepositPaid(bookingId: number): Promise<Booking>;
+  
+  // Booking management
+  getBooking(id: number): Promise<Booking | undefined>;
+  cancelBooking(id: number, cancelledBy: string, cancelReason?: string): Promise<Booking>;
+  updateBookingStatus(id: number, status: string): Promise<Booking>;
+  updateBookingPausedReason(id: number, reason: string): Promise<void>;
+  
+  // Premium
+  updateUserPremium(userId: number, isPremium: boolean, premiumExpiresAt: Date | null, stripeSubscriptionId: string | null): Promise<User>;
+  
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotifications(userId: number): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: number): Promise<number>;
+  markNotificationRead(id: number): Promise<Notification>;
+  markAllNotificationsRead(userId: number): Promise<void>;
+  
+  // Location
+  updateUser(userId: number, data: { name?: string; username?: string; password?: string; city?: string }): Promise<User>;
+  updateUserLocation(userId: number, lat: number, lng: number): Promise<User>;
+  
+  // Chat
+  getOrCreateConversation(bookingId: number, customerId: number, providerId: number): Promise<Conversation>;
+  getConversation(id: number): Promise<Conversation | undefined>;
+  getConversationByBooking(bookingId: number): Promise<Conversation | undefined>;
+  getUserConversations(userId: number): Promise<(Conversation & { otherUser: User; lastMessage: Message | null; unreadCount: number })[]>;
+  getMessages(conversationId: number): Promise<(Message & { sender: User })[]>;
+  createMessage(message: InsertMessage): Promise<Message>;
+  markMessagesRead(conversationId: number, userId: number): Promise<void>;
+  
+  // Profile
+  updateUserProfilePicture(userId: number, profilePicture: string): Promise<User>;
+  updateUserReferralCode(userId: number, referralCode: string): Promise<User>;
+  
+  // Referrals
+  createReferral(referral: InsertReferral): Promise<Referral>;
+  getReferralsByReferrer(referrerId: number): Promise<Referral[]>;
+  getReferralByReferred(referredId: number): Promise<Referral | undefined>;
+  updateReferralStatus(id: number, status: string): Promise<Referral>;
+  
+  // Service Packages
+  createServicePackage(pkg: InsertServicePackage): Promise<ServicePackage>;
+  getServicePackagesByProvider(providerId: number): Promise<ServicePackage[]>;
+  getServicePackage(id: number): Promise<ServicePackage | undefined>;
+  updateServicePackage(id: number, data: Partial<InsertServicePackage>): Promise<ServicePackage>;
+  deleteServicePackage(id: number): Promise<void>;
+  
+  // Payout methods
+  addToReferralBalance(userId: number, amount: number): Promise<User>;
+  deductFromReferralBalance(userId: number, amount: number): Promise<User | null>;
+  updateStripeConnectAccount(userId: number, accountId: string): Promise<User>;
+  createPayout(payout: InsertPayout): Promise<Payout>;
+  getUserPayouts(userId: number): Promise<Payout[]>;
+  updatePayoutStatus(id: number, status: string, transferId?: string, failureReason?: string): Promise<Payout>;
+  
+  // Ads
+  createAd(ad: InsertAd): Promise<Ad>;
+  getActiveAds(placement?: string): Promise<Ad[]>;
+  getAllAds(): Promise<Ad[]>;
+  updateAd(id: number, data: Partial<InsertAd>): Promise<Ad>;
+  deleteAd(id: number): Promise<void>;
+  
+  // Customer Feedback (vendor reviews of customers)
+  createCustomerFeedback(feedback: InsertCustomerFeedback): Promise<CustomerFeedback>;
+  getCustomerFeedback(bookingId: number): Promise<CustomerFeedback | undefined>;
+  getCustomerRating(customerId: number): Promise<{ averageRating: number; totalReviews: number }>;
+}
+
+export class DatabaseStorage implements IStorage {
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserByReferralCode(referralCode: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.referralCode, referralCode));
+    return user;
+  }
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, email));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async getServices(query?: { category?: string; search?: string }): Promise<(Service & { provider: User })[]> {
+    let q = db.select({
+      service: services,
+      provider: users,
+    })
+    .from(services)
+    .innerJoin(users, eq(services.providerId, users.id));
+
+    if (query?.category) {
+      q.where(eq(services.category, query.category));
+    }
+
+    // Simple search implementation
+    if (query?.search) {
+       q.where(
+         or(
+           ilike(services.title, `%${query.search}%`),
+           ilike(services.description, `%${query.search}%`),
+           ilike(services.category, `%${query.search}%`)
+         )
+       );
+    }
+
+    const results = await q;
+    return results.map(r => ({ ...r.service, provider: r.provider }));
+  }
+
+  async getService(id: number): Promise<(Service & { provider: User; reviews: Review[] }) | undefined> {
+    const [result] = await db.select({
+      service: services,
+      provider: users,
+    })
+    .from(services)
+    .innerJoin(users, eq(services.providerId, users.id))
+    .where(eq(services.id, id));
+
+    if (!result) return undefined;
+
+    const serviceReviews = await db.select().from(reviews).where(eq(reviews.serviceId, id));
+
+    return { ...result.service, provider: result.provider, reviews: serviceReviews };
+  }
+
+  async createService(service: InsertService): Promise<Service> {
+    const [newService] = await db.insert(services).values(service).returning();
+    return newService;
+  }
+
+  async createBooking(booking: InsertBooking): Promise<Booking> {
+    const [newBooking] = await db.insert(bookings).values(booking).returning();
+    return newBooking;
+  }
+
+  async getBookings(userId: number, role: 'customer' | 'provider'): Promise<(Booking & { service: Service })[]> {
+    if (role === 'customer') {
+      const results = await db.select({
+        booking: bookings,
+        service: services,
+      })
+      .from(bookings)
+      .innerJoin(services, eq(bookings.serviceId, services.id))
+      .where(eq(bookings.customerId, userId));
+      return results.map(r => ({ ...r.booking, service: r.service }));
+    } else {
+      // For provider, we need to join bookings -> services -> users(provider)
+      // Actually simpler: bookings -> services. where services.providerId = userId
+      const results = await db.select({
+        booking: bookings,
+        service: services,
+      })
+      .from(bookings)
+      .innerJoin(services, eq(bookings.serviceId, services.id))
+      .where(eq(services.providerId, userId));
+      return results.map(r => ({ ...r.booking, service: r.service }));
+    }
+  }
+
+  async createReview(review: InsertReview): Promise<Review> {
+    const [newReview] = await db.insert(reviews).values(review).returning();
+    return newReview;
+  }
+
+  async getReviews(serviceId: number): Promise<Review[]> {
+    return await db.select().from(reviews).where(eq(reviews.serviceId, serviceId));
+  }
+
+  // Transaction methods
+  async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    const [newTransaction] = await db.insert(transactions).values(transaction).returning();
+    return newTransaction;
+  }
+
+  async getTransaction(id: number): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.id, id));
+    return transaction;
+  }
+
+  async getTransactionByCheckoutSession(sessionId: string): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.stripeCheckoutSessionId, sessionId));
+    return transaction;
+  }
+
+  async updateTransactionStatus(id: number, status: string, paymentIntentId?: string): Promise<Transaction> {
+    const updateData: any = { status };
+    if (paymentIntentId) {
+      updateData.stripePaymentIntentId = paymentIntentId;
+    }
+    const [updated] = await db.update(transactions).set(updateData).where(eq(transactions.id, id)).returning();
+    return updated;
+  }
+
+  async getPlatformEarnings(): Promise<{ totalEarnings: number; totalTransactions: number; recentTransactions: Transaction[] }> {
+    const completedTransactions = await db.select().from(transactions).where(eq(transactions.status, 'completed')).orderBy(desc(transactions.createdAt));
+    
+    const totalEarnings = completedTransactions.reduce((acc, t) => acc + t.platformFee, 0);
+    
+    return {
+      totalEarnings,
+      totalTransactions: completedTransactions.length,
+      recentTransactions: completedTransactions.slice(0, 20),
+    };
+  }
+
+  async getProviderEarnings(providerId: number): Promise<{ totalEarnings: number; transactions: Transaction[] }> {
+    const providerTransactions = await db.select().from(transactions)
+      .where(eq(transactions.providerId, providerId))
+      .orderBy(desc(transactions.createdAt));
+    
+    const completedTransactions = providerTransactions.filter(t => t.status === 'completed');
+    const totalEarnings = completedTransactions.reduce((acc, t) => acc + t.providerPayout, 0);
+    
+    return {
+      totalEarnings,
+      transactions: providerTransactions,
+    };
+  }
+
+  async updateBookingDepositPaid(bookingId: number): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({ depositPaid: true }).where(eq(bookings.id, bookingId)).returning();
+    return updated;
+  }
+
+  async getTransactionByBookingId(bookingId: number): Promise<Transaction | undefined> {
+    const [transaction] = await db.select().from(transactions).where(eq(transactions.bookingId, bookingId));
+    return transaction;
+  }
+
+  async updateTransactionRefund(id: number, stripeRefundId: string, reason: string): Promise<Transaction> {
+    const [updated] = await db.update(transactions).set({ 
+      status: 'refunded',
+      stripeRefundId,
+      refundReason: reason,
+      refundedAt: new Date(),
+    }).where(eq(transactions.id, id)).returning();
+    return updated;
+  }
+
+  async getBooking(id: number): Promise<Booking | undefined> {
+    const [booking] = await db.select().from(bookings).where(eq(bookings.id, id));
+    return booking;
+  }
+
+  async cancelBooking(id: number, cancelledBy: string, cancelReason?: string): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({
+      status: 'cancelled',
+      cancelledBy: cancelledBy as any,
+      cancelledAt: new Date(),
+      cancelReason: cancelReason || null,
+    }).where(eq(bookings.id, id)).returning();
+    return updated;
+  }
+
+  async updateBookingStatus(id: number, status: string): Promise<Booking> {
+    const [updated] = await db.update(bookings).set({ status: status as any }).where(eq(bookings.id, id)).returning();
+    return updated;
+  }
+  async updateBookingPausedReason(id: number, reason: string): Promise<void> {
+    await db.update(bookings).set({ pausedReason: reason }).where(eq(bookings.id, id));
+  }
+
+  async updateUserPremium(userId: number, isPremium: boolean, premiumExpiresAt: Date | null, stripeSubscriptionId: string | null): Promise<User> {
+    const [updated] = await db.update(users).set({ 
+      isPremium,
+      premiumExpiresAt,
+      stripeSubscriptionId,
+    }).where(eq(users.id, userId)).returning();
+    return updated;
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [created] = await db.insert(notifications).values(notification).returning();
+    return created;
+  }
+
+  async getNotifications(userId: number): Promise<Notification[]> {
+    return await db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+  }
+
+  async getUnreadNotificationCount(userId: number): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+    return Number(result[0]?.count || 0);
+  }
+
+  async markNotificationRead(id: number): Promise<Notification> {
+    const [updated] = await db.update(notifications)
+      .set({ readAt: new Date() })
+      .where(eq(notifications.id, id))
+      .returning();
+    return updated;
+  }
+
+  async markAllNotificationsRead(userId: number): Promise<void> {
+    await db.update(notifications)
+      .set({ readAt: new Date() })
+      .where(eq(notifications.userId, userId));
+  }
+
+  async updateUser(userId: number, data: { name?: string; username?: string; password?: string; city?: string }): Promise<User> {
+    const [updated] = await db.update(users)
+      .set(data)
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async updateUserLocation(userId: number, lat: number, lng: number): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ lat, lng })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  // Chat methods
+  async getOrCreateConversation(bookingId: number, customerId: number, providerId: number): Promise<Conversation> {
+    const existing = await db.select().from(conversations).where(eq(conversations.bookingId, bookingId));
+    if (existing.length > 0) return existing[0];
+    
+    const [created] = await db.insert(conversations).values({
+      bookingId,
+      customerId,
+      providerId,
+    }).returning();
+    return created;
+  }
+
+  async getConversation(id: number): Promise<Conversation | undefined> {
+    const [conv] = await db.select().from(conversations).where(eq(conversations.id, id));
+    return conv;
+  }
+
+  async getConversationByBooking(bookingId: number): Promise<Conversation | undefined> {
+    const [conv] = await db.select().from(conversations).where(eq(conversations.bookingId, bookingId));
+    return conv;
+  }
+
+  async getUserConversations(userId: number): Promise<(Conversation & { otherUser: User; lastMessage: Message | null; unreadCount: number })[]> {
+    const convs = await db.select().from(conversations)
+      .where(or(eq(conversations.customerId, userId), eq(conversations.providerId, userId)))
+      .orderBy(desc(conversations.createdAt));
+    
+    const results = await Promise.all(convs.map(async (conv) => {
+      const otherUserId = conv.customerId === userId ? conv.providerId : conv.customerId;
+      const [otherUser] = await db.select().from(users).where(eq(users.id, otherUserId));
+      
+      const msgs = await db.select().from(messages)
+        .where(eq(messages.conversationId, conv.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+      
+      const unreadResult = await db.select({ count: sql<number>`count(*)` })
+        .from(messages)
+        .where(and(
+          eq(messages.conversationId, conv.id),
+          isNull(messages.readAt),
+          sql`${messages.senderId} != ${userId}`
+        ));
+      
+      return {
+        ...conv,
+        otherUser,
+        lastMessage: msgs[0] || null,
+        unreadCount: Number(unreadResult[0]?.count || 0),
+      };
+    }));
+    
+    return results;
+  }
+
+  async getMessages(conversationId: number): Promise<(Message & { sender: User })[]> {
+    const msgs = await db.select({
+      message: messages,
+      sender: users,
+    })
+    .from(messages)
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(messages.createdAt);
+    
+    return msgs.map(m => ({ ...m.message, sender: m.sender }));
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const [created] = await db.insert(messages).values(message).returning();
+    return created;
+  }
+
+  async markMessagesRead(conversationId: number, userId: number): Promise<void> {
+    await db.update(messages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(messages.conversationId, conversationId),
+        sql`${messages.senderId} != ${userId}`,
+        isNull(messages.readAt)
+      ));
+  }
+
+  // Profile methods
+  async updateUserProfilePicture(userId: number, profilePicture: string): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ profilePicture })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async updateUserReferralCode(userId: number, referralCode: string): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ referralCode })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  // Referral methods
+  async createReferral(referral: InsertReferral): Promise<Referral> {
+    const [created] = await db.insert(referrals).values(referral).returning();
+    return created;
+  }
+
+  async getReferralsByReferrer(referrerId: number): Promise<Referral[]> {
+    return db.select().from(referrals).where(eq(referrals.referrerId, referrerId));
+  }
+
+  async getReferralByReferred(referredId: number): Promise<Referral | undefined> {
+    const [referral] = await db.select().from(referrals).where(eq(referrals.referredId, referredId));
+    return referral;
+  }
+
+  async updateReferralStatus(id: number, status: string): Promise<Referral> {
+    const updates: any = { status };
+    if (status === "completed") updates.completedAt = new Date();
+    if (status === "rewarded") updates.rewardedAt = new Date();
+    const [updated] = await db.update(referrals).set(updates).where(eq(referrals.id, id)).returning();
+    return updated;
+  }
+
+  // Service Package methods
+  async createServicePackage(pkg: InsertServicePackage): Promise<ServicePackage> {
+    const [created] = await db.insert(servicePackages).values(pkg).returning();
+    return created;
+  }
+
+  async getServicePackagesByProvider(providerId: number): Promise<ServicePackage[]> {
+    return db.select().from(servicePackages)
+      .where(and(eq(servicePackages.providerId, providerId), eq(servicePackages.isActive, true)));
+  }
+
+  async getServicePackage(id: number): Promise<ServicePackage | undefined> {
+    const [pkg] = await db.select().from(servicePackages).where(eq(servicePackages.id, id));
+    return pkg;
+  }
+
+  async updateServicePackage(id: number, data: Partial<InsertServicePackage>): Promise<ServicePackage> {
+    const [updated] = await db.update(servicePackages).set(data).where(eq(servicePackages.id, id)).returning();
+    return updated;
+  }
+
+  async deleteServicePackage(id: number): Promise<void> {
+    await db.update(servicePackages).set({ isActive: false }).where(eq(servicePackages.id, id));
+  }
+
+  // Payout methods
+  async addToReferralBalance(userId: number, amount: number): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ referralBalance: sql`${users.referralBalance} + ${amount}` })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async deductFromReferralBalance(userId: number, amount: number): Promise<User | null> {
+    // Atomic deduction with balance check to prevent race conditions and negative balance
+    const [updated] = await db.update(users)
+      .set({ referralBalance: sql`${users.referralBalance} - ${amount}` })
+      .where(and(eq(users.id, userId), sql`${users.referralBalance} >= ${amount}`))
+      .returning();
+    return updated || null; // Returns null if balance was insufficient
+  }
+
+  async updateStripeConnectAccount(userId: number, accountId: string): Promise<User> {
+    const [updated] = await db.update(users)
+      .set({ stripeConnectAccountId: accountId })
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async createPayout(payout: InsertPayout): Promise<Payout> {
+    const [created] = await db.insert(payouts).values(payout).returning();
+    return created;
+  }
+
+  async getUserPayouts(userId: number): Promise<Payout[]> {
+    return db.select().from(payouts)
+      .where(eq(payouts.userId, userId))
+      .orderBy(desc(payouts.createdAt));
+  }
+
+  async updatePayoutStatus(id: number, status: string, transferId?: string, failureReason?: string): Promise<Payout> {
+    const updates: any = { status };
+    if (transferId) updates.stripeTransferId = transferId;
+    if (failureReason) updates.failureReason = failureReason;
+    if (status === 'completed') updates.completedAt = new Date();
+    const [updated] = await db.update(payouts).set(updates).where(eq(payouts.id, id)).returning();
+    return updated;
+  }
+
+  // Ads methods
+  async createAd(ad: InsertAd): Promise<Ad> {
+    const [created] = await db.insert(ads).values(ad).returning();
+    return created;
+  }
+
+  async getActiveAds(placement?: string): Promise<Ad[]> {
+    const now = new Date();
+    let query = db.select().from(ads).where(
+      and(
+        eq(ads.isActive, true),
+        or(isNull(ads.startsAt), lte(ads.startsAt, now)),
+        or(isNull(ads.endsAt), gte(ads.endsAt, now))
+      )
+    );
+    
+    const result = await query;
+    if (placement) {
+      return result.filter(ad => ad.placement === placement);
+    }
+    return result;
+  }
+
+  async getAllAds(): Promise<Ad[]> {
+    return db.select().from(ads).orderBy(desc(ads.createdAt));
+  }
+
+  async updateAd(id: number, data: Partial<InsertAd>): Promise<Ad> {
+    const [updated] = await db.update(ads).set(data).where(eq(ads.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAd(id: number): Promise<void> {
+    await db.update(ads).set({ isActive: false }).where(eq(ads.id, id));
+  }
+
+  // Customer Feedback methods
+  async createCustomerFeedback(feedback: InsertCustomerFeedback): Promise<CustomerFeedback> {
+    const [created] = await db.insert(customerFeedback).values(feedback).returning();
+    return created;
+  }
+
+  async getCustomerFeedback(bookingId: number): Promise<CustomerFeedback | undefined> {
+    const [feedback] = await db.select().from(customerFeedback).where(eq(customerFeedback.bookingId, bookingId));
+    return feedback;
+  }
+
+  async getCustomerRating(customerId: number): Promise<{ averageRating: number; totalReviews: number }> {
+    const result = await db.select({
+      avgRating: sql<number>`COALESCE(AVG(${customerFeedback.rating}), 0)`,
+      count: sql<number>`COUNT(*)`,
+    }).from(customerFeedback).where(eq(customerFeedback.customerId, customerId));
+    
+    return {
+      averageRating: Number(result[0]?.avgRating) || 0,
+      totalReviews: Number(result[0]?.count) || 0,
+    };
+  }
+}
+
+export const storage = new DatabaseStorage();
+
+
+

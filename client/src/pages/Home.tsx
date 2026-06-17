@@ -9,6 +9,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/hooks/use-auth";
 
 type Ad = {
   id: number;
@@ -25,6 +26,7 @@ const HOUSTON: [number, number] = [29.7604, -95.3698];
 
 export default function Home() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | undefined>();
   const [userLocation, setUserLocation] = useState<[number, number]>(HOUSTON);
@@ -45,10 +47,14 @@ export default function Home() {
     }
   }, []);
 
-  const { data: services = [], isLoading } = useServices({
+  const { data: rawServices = [], isLoading } = useServices({
     search: searchTerm,
     category: activeCategory,
   });
+  const services = useMemo(() => {
+    if (!user?.city) return rawServices;
+    return rawServices.filter(s => !s.provider?.city || s.provider.city.toLowerCase().includes(user.city.toLowerCase()));
+  }, [rawServices, user?.city]);
 
   const { data: homeAds = [] } = useQuery<Ad[]>({
     queryKey: ["/api/ads", "home_feed"],
@@ -178,7 +184,8 @@ export default function Home() {
                             <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center text-[10px] font-bold text-primary">
                               {service.provider.name.charAt(0)}
                             </div>
-                            <span className="font-medium">{service.title}</span>
+<span className="font-medium">{service.title}</span>
+                            {service.provider.city && <span className="text-muted-foreground">· {service.provider.city}</span>}
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="flex items-center text-amber-500 font-bold bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">

@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+﻿import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, User, LogOut, Briefcase, Calendar, DollarSign, Moon, Sun, Bell, Check, MessageSquare, Settings } from "lucide-react";
+import { Search, User, LogOut, Briefcase, Calendar, DollarSign, Moon, Sun, Bell, Check, MessageSquare, Settings, Users } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -198,6 +198,9 @@ export function Navbar() {
                 <DropdownMenuItem onClick={() => setLocation("/bookings")} className="cursor-pointer rounded-lg">
                   <Calendar className="w-4 h-4 mr-2" /> {t("nav.bookings")}
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLocation("/providers")} className="cursor-pointer rounded-lg">
+                  <Users className="w-4 h-4 mr-2" /> Browse Providers
+                </DropdownMenuItem>
                 {user.role === "provider" && (
                   <>
                     <DropdownMenuItem onClick={() => setLocation("/profile")} className="cursor-pointer rounded-lg text-primary font-medium">
@@ -240,3 +243,5 @@ export function Navbar() {
     </nav>
   );
 }
+
+
